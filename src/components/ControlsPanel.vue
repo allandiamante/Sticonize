@@ -13,7 +13,6 @@ const pngBg = ref('transparent')
 const fmt = ref('svg')
 
 const dice = () => { props.opts.seed = Math.floor(Math.random() * 100000) }
-// min/max do input não valem na leitura: 999999 aqui vira um canvas que mata a aba.
 const size = () => Math.min(Math.max(parseInt(pngSize.value, 10) || 1024, 32), 4096)
 const args = () => [fmt.value, size(), pngBg.value]
 </script>

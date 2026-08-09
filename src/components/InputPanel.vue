@@ -35,7 +35,7 @@ watch(query, s => {
     try{
       const r = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(s)}&limit=48`)
       const data = await r.json()
-      if(query.value.trim() !== s) return   // resposta atrasada de uma busca antiga
+      if(query.value.trim() !== s) return   
       found.value = data.icons ?? []
     }catch{
       failed.value = true
@@ -56,7 +56,13 @@ async function pick(id){
 
 <template>
   <section class="col col--left">
-    <p class="eyebrow">{{ t.input }}</p>
+    <p class="eyebrow">
+      {{ t.input }}
+      <a class="icon-link" href="https://github.com/allandiamante/Sticonize" target="_blank" rel="noopener" :title="t.repoLink">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6c-.6-1.4-1.4-1.8-1.4-1.8c-1-.7.1-.7.1-.7c1.2.1 1.8 1.2 1.8 1.2c1 1.8 2.8 1.3 3.5 1c.1-.8.4-1.3.7-1.6c-2.7-.3-5.5-1.3-5.5-6c0-1.2.5-2.3 1.3-3.1c-.2-.4-.6-1.6.1-3.2c0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2c.7 1.6.2 2.8.1 3.2c.8.8 1.2 1.9 1.2 3.2c0 4.6-2.8 5.6-5.5 5.9c.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+        <span class="sr-only">{{ t.repoLink }}</span>
+      </a>
+    </p>
 
     <label
       class="drop"
@@ -83,7 +89,7 @@ async function pick(id){
 
     <p class="eyebrow eyebrow--gap">
       {{ t.iconify }}
-      <a class="iconify-link" href="https://iconify.design" target="_blank" rel="noopener" :title="t.iconifyLink">
+      <a class="icon-link" href="https://iconify.design" target="_blank" rel="noopener" :title="t.iconifyLink">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.857 19.429V9.642q.35-.089.67-.295l1.616-1.045v9.984h4.571v2.285H4c-.63 0-1.143-.512-1.143-1.142m7.429-8.572a1.715 1.715 0 1 1 3.43.001a1.715 1.715 0 0 1-3.43 0m-5.143-8V1.143a1.143 1.143 0 0 1 2.286 0v.235zm9.143 15.429h4.571V8.302l1.616 1.045q.32.206.67.295v9.787c0 .63-.512 1.143-1.143 1.143h-5.714Zm-.004-17.028l8.053 5.211a1.144 1.144 0 0 1-1.242 1.919l-8.041-5.203l.19-.123a2.28 2.28 0 0 0 1.04-1.804M11.38.183a1.144 1.144 0 0 1 1.242 1.92L2.907 8.387a1.144 1.144 0 0 1-1.242-1.919Zm2.6 22.103H22c.473 0 .857.384.857.857A.86.86 0 0 1 22 24H2a.86.86 0 0 1-.857-.857c0-.473.384-.857.857-.857h8.02a2.286 2.286 0 0 0 3.96 0m-.836-8.81v7.667a1.143 1.143 0 0 1-2.286 0v-7.667a2.85 2.85 0 0 0 1.143.238c.406 0 .793-.085 1.143-.238"/></svg>
         <span class="sr-only">{{ t.iconifyLink }}</span>
       </a>

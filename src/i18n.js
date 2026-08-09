@@ -1,6 +1,5 @@
 import { computed, ref, watchEffect } from 'vue'
 
-// ponytail: dois idiomas e ~50 strings — um objeto e um computed resolvem, sem vue-i18n.
 const dict = {
   pt: {
     titlePre: 'St', titleEm: 'iconify',
@@ -9,6 +8,7 @@ const dict = {
     theme: {dark: 'Modo escuro', light: 'Modo claro'},
 
     input: 'Entrada',
+    repoLink: 'Ver o projeto no GitHub',
     dropTitle: 'Solte um SVG aqui',
     dropHint: 'ou clique para escolher',
     pasteToggle: 'ou colar o código SVG',
@@ -83,6 +83,7 @@ const dict = {
     theme: {dark: 'Dark mode', light: 'Light mode'},
 
     input: 'Input',
+    repoLink: 'View the project on GitHub',
     dropTitle: 'Drop an SVG here',
     dropHint: 'or click to pick',
     pasteToggle: 'or paste the SVG code',
@@ -157,6 +158,7 @@ const dict = {
     theme: {dark: 'Donkere modus', light: 'Lichte modus'},
 
     input: 'Invoer',
+    repoLink: 'Bekijk het project op GitHub',
     dropTitle: 'Sleep hier een SVG',
     dropHint: 'of klik om te kiezen',
     pasteToggle: 'of plak de SVG-code',
@@ -234,7 +236,6 @@ export const lang = ref(
 
 export const t = computed(() => dict[lang.value])
 
-// scribble.js lança códigos ('noSvgTag'); rough.js lança texto solto — passa direto.
 export const errText = e => t.value.err[e.message] || e.message
 
 watchEffect(() => {

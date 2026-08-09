@@ -8,7 +8,7 @@ export const theme = ref(
 )
 
 export const INK = { dark: '#E8EDE9', light: '#14181A' }
-const PAPER = { dark: '#14181A', light: '#EFF2ED' }   // espelha --paper do tokens.css
+const PAPER = { dark: '#14181A', light: '#EFF2ED' }   
 
 watchEffect(() => {
   localStorage.setItem('theme', theme.value)

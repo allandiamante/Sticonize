@@ -144,10 +144,10 @@ textarea{
 textarea:focus{outline:var(--focus); outline-offset:1px}
 
 .eyebrow--gap{margin-top:18px}
-.iconify-link{order:1;color:var(--ink-soft);line-height:0;display:flex;align-items:center}
-.iconify-link svg{width:15px;height:15px;display:block}
-.iconify-link:hover{color:var(--pen-blue)}
-.iconify-link:focus-visible{outline:var(--focus);outline-offset:2px}
+.icon-link{order:1;color:var(--ink-soft);line-height:0;display:flex;align-items:center}
+.icon-link svg{width:15px;height:15px;display:block}
+.icon-link:hover{color:var(--pen-blue)}
+.icon-link:focus-visible{outline:var(--focus);outline-offset:2px}
 .sr-only{
   position:absolute;width:1px;height:1px;
   margin:-1px;padding:0;border:0;
@@ -382,7 +382,6 @@ input[type=color]{
 
 .divider{height:var(--line);background:var(--rule-strong);margin:18px 0}
 
-/* Empilhado não cabe em uma tela — aqui a página volta a rolar, como esperado no celular. */
 @media (max-width: 1020px){
   body{height:auto;overflow:visible}
   #app{height:auto;min-height:100dvh}

@@ -65,31 +65,24 @@ export function elementToD(el){
   }
 }
 
-// ---------- leitura do SVG ----------
 const cache = new Map()
 
-// Memoiza por texto: o mesmo arquivo só é medido no DOM uma vez.
 export function parse(svgText){
   let hit = cache.get(svgText)
   if(!hit){
     hit = parseSvg(svgText)
-    // ponytail: esvazia tudo ao encher — chave é o SVG inteiro, guardar mil vaza memória.
-    // Trocar por LRU se alguém reclamar de remedir a fila depois de limpar.
     if(cache.size >= 64) cache.clear()
     cache.set(svgText, hit)
   }
   return hit
 }
 
-// desc/title/foreignObject são HTML integration points: dentro deles o parser volta
-// para HTML completo, então SVG hostil pode reintroduzir iframe/embed. Nenhum dos três
-// carrega geometria — fora. style vazaria CSS para a página inteira enquanto medimos.
 const STRIP = 'script,style,foreignObject,desc,title,image,use,animate,animateTransform,animateMotion,set'
 
 export function parseSvg(svgText){
   const doc = new DOMParser().parseFromString(svgText, 'text/html')
   const src = doc.querySelector('svg')
-  if(!src) throw new Error('noSvgTag')   // códigos: i18n.js tem o texto
+  if(!src) throw new Error('noSvgTag')  
   src.querySelectorAll(STRIP).forEach(el => el.remove())
   for(const el of [src, ...src.querySelectorAll('*')])
     for(const a of [...el.attributes]) if(/^on/i.test(a.name)) el.removeAttributeNode(a)
@@ -263,8 +256,8 @@ export function zipStore(files, date = new Date()){
   const raw = b => { out.set(b, p); p += b.length }
 
   for(const e of entries){
-    e.at = p                                              // o índice central aponta pra cá
-    u32(0x04034b50); u16(20); u16(0x0800); u16(0)         // 0x0800: nome do arquivo em UTF-8
+    e.at = p                                             
+    u32(0x04034b50); u16(20); u16(0x0800); u16(0)         
     u16(time); u16(day)
     u32(e.crc); u32(e.data.length); u32(e.data.length)
     u16(e.name.length); u16(0)

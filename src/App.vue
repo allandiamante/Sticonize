@@ -106,7 +106,7 @@ async function downloadAll(kind, size, bg){
       for(let n = 2; taken.has(name); n++) name = `${base}-${n}${ext}`
       taken.add(name)
       files.push({name, data: typeof f.data === 'string' ? enc.encode(f.data) : f.data})
-    }catch(err){ /* pula o que falhar */ }
+    }catch(err){ }
   }
   batch.value = ''
   if(files.length) saveBlob(new Blob([zipStore(files)], {type:'application/zip'}), t.value.zipName)
