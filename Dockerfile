@@ -10,6 +10,8 @@ RUN npm run build
 
 # Imagem unprivileged: já roda como UID 101 e escuta em 8080, sem config extra.
 FROM nginxinc/nginx-unprivileged:alpine
+# Explicit so the reverse proxy autodetects the port instead of assuming 3000.
+EXPOSE 8080
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
 server {
