@@ -34,6 +34,7 @@ watch(query, s => {
   timer = setTimeout(async () => {
     try{
       const r = await fetch(`https://api.iconify.design/search?query=${encodeURIComponent(s)}&limit=48`)
+      if(!r.ok) throw new Error(r.status)   // fetch only rejects on network error; 5xx arrives as a normal response
       const data = await r.json()
       if(query.value.trim() !== s) return   
       found.value = data.icons ?? []
@@ -46,8 +47,9 @@ watch(query, s => {
 
 async function pick(id){
   try{
-    const text = await (await fetch(iconUrl(id))).text()
-    emit('pick', id.replace(':', '-'), text, id)
+    const r = await fetch(iconUrl(id))
+    if(!r.ok) throw new Error(r.status)   // without this the gateway's error page goes downstream as if it were the icon
+    emit('pick', id.replace(':', '-'), await r.text(), id)
   }catch{
     failed.value = true
   }
