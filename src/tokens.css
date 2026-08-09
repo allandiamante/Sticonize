@@ -1,0 +1,73 @@
+/* Project tokens — the only file with a raw color, stroke or type value.
+   Theming is just this pair of blocks; nothing else in the CSS knows a hex. */
+:root{
+  color-scheme: dark;
+
+  /* surfaces */
+  --paper:#14181A;        /* app background */
+  --paper-deep:#0E1113;   /* drawing board */
+  --paper-raise:#1B2124;  /* fields, selected items */
+  --paper-thumb:#ECEFEA;  /* thumbnail: a foreign icon is usually dark ink */
+  --grid:#1E2529;
+  --wash:rgba(255,255,255,.045);
+  --wash-hot:rgba(255,255,255,.08);
+
+  /* ink */
+  --ink:#E8EDE9;
+  --ink-soft:#8B968F;
+  --rule:#2C3438;
+  --rule-strong:#3C474D;
+
+  /* pens */
+  --pen-red:#E4614A;
+  --pen-blue:#7BA1E4;
+  --pen-green:#4FA97A;
+}
+
+:root[data-theme="light"]{
+  color-scheme: light;
+
+  --paper:#EFF2ED;
+  --paper-deep:#FFFFFF;
+  --paper-raise:#FFFFFF;
+  --paper-thumb:#FFFFFF;
+  --grid:#D6DED3;
+  --wash:rgba(255,255,255,.6);
+  --wash-hot:rgba(255,255,255,.92);
+
+  --ink:#14181A;
+  --ink-soft:#5C6560;
+  --rule:#C3CCBF;
+  --rule-strong:#A3B09F;
+
+  --pen-red:#BF3B2B;
+  --pen-blue:#2E4A86;
+  --pen-green:#2C6E4A;
+}
+
+/* Structure: the same in both themes. */
+:root{
+  /* strokes: thin for controls, thick for section dividers */
+  --hair:1px;
+  --line:1.5px;
+  --split:3px;
+  --border:var(--line) solid var(--rule);
+  --border-ink:var(--line) solid var(--ink);
+  --divide:var(--split) solid var(--rule-strong);
+  --frame:var(--split) solid var(--ink);
+  --focus:2px solid var(--pen-blue);
+
+  /* typography */
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-eyebrow:10px;
+  --fs-mono:11px;
+  --fs-body:14px;
+  --track:.14em;
+
+  /* graph-paper mesh — only the drawing board uses it */
+  --grid-size:24px;
+  --grid-lines:
+    linear-gradient(var(--grid) var(--hair), transparent var(--hair)),
+    linear-gradient(90deg, var(--grid) var(--hair), transparent var(--hair));
+}
