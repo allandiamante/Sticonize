@@ -2,7 +2,7 @@ import { computed, ref, watchEffect } from 'vue'
 
 const dict = {
   pt: {
-    titlePre: 'St', titleEm: 'iconify',
+    titlePre: 'St', titleEm: 'iconize',
     tagline: 'Solte um SVG — ele volta rabiscado à mão livre.',
     stamp: 'Traço · Hachura · Ruído',
     theme: {dark: 'Modo escuro', light: 'Modo claro'},
@@ -77,7 +77,7 @@ const dict = {
   },
 
   en: {
-    titlePre: 'St', titleEm: 'iconify',
+    titlePre: 'St', titleEm: 'iconize',
     tagline: 'Drop an SVG — get it back redrawn freehand.',
     stamp: 'Stroke · Hatch · Noise',
     theme: {dark: 'Dark mode', light: 'Light mode'},
@@ -152,7 +152,7 @@ const dict = {
   },
 
   nl: {
-    titlePre: 'St', titleEm: 'iconify',
+    titlePre: 'St', titleEm: 'iconize',
     tagline: 'Sleep een SVG — je krijgt hem met de hand overgetekend terug.',
     stamp: 'Lijn · Arcering · Ruis',
     theme: {dark: 'Donkere modus', light: 'Lichte modus'},
