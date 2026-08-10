@@ -24,12 +24,13 @@ it on any host.
 
 ```bash
 docker build -t sticonize .
-docker run --rm -p 8080:8080 sticonize
+docker run --rm -p 3000:3000 sticonize
 ```
 
 Multi-stage: Node builds, nginx serves. The runtime image is
-`nginx-unprivileged`, so it runs as UID 101 on port 8080 with no extra
-plumbing — map it to 80 at the proxy or the host.
+`nginx-unprivileged`, so it runs as UID 101 with no extra plumbing. It listens
+on 3000 — the port most PaaS proxies (Coolify among them) assume by default —
+so map it to 80 at the proxy or the host.
 
 ## How it works
 
