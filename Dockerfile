@@ -24,6 +24,10 @@ server {
   gzip_min_length 1024;
   gzip_types text/css application/javascript image/svg+xml application/xml;
 
+  # The app routes /vectorize itself, so a deep link or a refresh has to reach index.html
+  # instead of 404ing on a file that was never built.
+  location / { try_files $uri $uri/ /index.html; }
+
   # frame-ancestors is the only CSP directive <meta> ignores — it only works as a header.
   # The rest of the policy stays in index.html.
   add_header Content-Security-Policy "frame-ancestors 'none'" always;

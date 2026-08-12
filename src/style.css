@@ -69,18 +69,71 @@ body{
   white-space:nowrap;
 }
 
+/* Page navigation — file tabs cut out of the strip and joined to the page below.
+   Deliberately not the .chip look: chips set an option, these change the address. */
+.nav{
+  flex:none;
+  display:flex;
+  align-items:flex-end;
+  gap:4px;
+  padding:0 22px;
+  background:var(--paper-deep);
+  border-bottom:var(--divide);
+}
+.nav-tab{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  font-family:var(--mono);
+  font-size:var(--fs-mono);
+  letter-spacing:var(--track);
+  text-transform:uppercase;
+  text-decoration:none;
+  color:var(--ink-soft);
+  /* the extra bottom padding is the slice that covers the strip's rule below */
+  padding:10px 20px calc(10px + var(--split));
+  margin-bottom:calc(var(--split) * -1);
+  border:var(--line) solid transparent;
+  border-bottom:none;
+  cursor:pointer;
+}
+.nav-tab:hover{color:var(--ink);background:var(--wash)}
+.nav-tab:focus-visible{outline:var(--focus);outline-offset:-3px}
+.nav-tab.on{
+  color:var(--ink);
+  background:var(--paper);
+  border-color:var(--rule-strong);
+}
+.nav-tab.on::before{
+  content:"";
+  position:absolute;
+  top:calc(var(--line) * -1);
+  left:calc(var(--line) * -1);
+  right:calc(var(--line) * -1);
+  height:var(--split);
+  background:var(--pen-red);
+}
+.nav-no{color:var(--pen-blue);letter-spacing:0}
+.nav-tab.on .nav-no{color:var(--pen-red)}
+
 .wrap{
   display:grid;
   grid-template-columns: 300px minmax(0,1fr) 268px;
   gap:0;
   align-items:stretch;
   flex:1;
-  min-height:0;   
+  min-height:0;
+  /* replays every time a page goes from display:none back to shown, which is the
+     whole page-change animation — no JS, no transition hooks */
+  animation:page-in .22s ease-out;
 }
+@keyframes page-in{from{opacity:0;transform:translateY(7px)}}
 
 .col{padding:20px;min-height:0;overflow-y:auto}
 .col--left{border-right:var(--divide)}
-.col--right{border-left:var(--divide)}
+/* room to scroll past the last field, so its balloon is not cut off by this column */
+.col--right{border-left:var(--divide);padding-bottom:120px}
 
 .eyebrow{
   font-family:var(--mono);
@@ -226,6 +279,81 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 }
 .queue .kill:hover{color:var(--pen-red)}
 
+/* vectorize tab: the picked source image and the setup it suggests */
+.source{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:14px;
+  padding:7px 8px;
+  border:var(--line) solid var(--ink);
+  background:var(--paper-raise);
+}
+.source .thumb{
+  width:40px;height:40px;flex:none;
+  background:var(--paper-thumb);
+  border:var(--hair) solid var(--rule);
+  overflow:hidden;
+}
+.source .thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.source-info{flex:1;min-width:0}
+.source .nm{
+  font-size:12px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.source .dim{
+  font-family:var(--mono);
+  font-size:10.5px;
+  color:var(--ink-soft);
+}
+.source .kill{
+  border:none;background:none;cursor:pointer;
+  color:var(--ink-soft);font-size:16px;line-height:1;padding:2px 4px;
+}
+.source .kill:hover{color:var(--pen-red)}
+
+.guide{
+  border:var(--line) solid var(--rule-strong);
+  background:var(--wash);
+  padding:11px 12px;
+}
+.guide-stats{margin:0;font-family:var(--mono);font-size:11px}
+.guide-stats div{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:3px 0;
+  border-bottom:var(--hair) solid var(--rule);
+}
+.guide-stats div:last-child{border-bottom:none}
+.guide-stats dt{color:var(--ink-soft)}
+.guide-stats dd{margin:0;color:var(--ink)}
+.guide-note{
+  margin:10px 0 0;
+  font-size:11.5px;
+  line-height:1.4;
+  color:var(--ink-soft);
+}
+.guide-pick{
+  margin:9px 0 11px;
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--ink);
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.guide-preset{
+  background:var(--ink);
+  color:var(--paper);
+  letter-spacing:.06em;
+  padding:2px 7px;
+}
+.guide .btn{margin-bottom:0}
+
 .col--stage{display:flex;flex-direction:column}
 .stage{
   background-image:var(--grid-lines);
@@ -242,9 +370,25 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
   padding:22px;
   position:relative;
 }
-.stage-art{width:100%;height:100%}
+.stage-art{width:100%;height:100%;object-fit:contain}
 .stage svg{width:100%;height:100%;display:block}
 .stage-error{font-size:12px;color:var(--pen-red);text-align:center;padding:16px}
+.stage--send{cursor:pointer}
+.stage--send:hover{border-color:var(--pen-red)}
+.stage-wait, .stage-badge{
+  font-family:var(--mono);
+  font-size:11.5px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+}
+.stage-badge{
+  position:absolute;
+  top:10px;right:12px;
+  background:var(--paper);
+  border:var(--hair) solid var(--rule);
+  padding:3px 7px;
+}
 .stage-mark{
   width:58%;
   color:var(--ink-soft);
@@ -273,6 +417,7 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 }
 
 .presets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.presets--view{margin:10px 0 0}
 .chip{
   font-family:var(--mono);
   font-size:var(--fs-mono);
@@ -285,17 +430,20 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 }
 .chip:hover{border-color:var(--ink)}
 .chip.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip:disabled{opacity:.35;cursor:not-allowed}
+.chip:disabled:hover{border-color:var(--rule)}
 
 /* controls */
 .ctrl{margin-bottom:15px}
 .ctrl-head{
+  position:relative;
   display:flex;
   justify-content:space-between;
-  align-items:baseline;
+  align-items:center;
   gap:8px;
   margin-bottom:5px;
 }
-.ctrl-head label{font-size:12.5px}
+.ctrl-head label{font-size:12.5px;margin-right:auto}
 .ctrl-head output{
   font-family:var(--mono);
   font-size:var(--fs-mono);
@@ -341,11 +489,85 @@ select:focus, input[type=number]:focus{outline:var(--focus);outline-offset:1px}
 
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 
+.check-row{position:relative;display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12.5px;
+  margin-right:auto;
+  cursor:pointer;
+}
+.check input{
+  width:14px;height:14px;
+  accent-color:var(--pen-blue);
+  margin:0;
+  cursor:pointer;
+}
+
+/* Field help: a marker in the right-hand gutter, and the balloon it opens on hover.
+   The balloon is a child of the marker but positioned against the row above it, which
+   is what keeps it inside the 268px column instead of forcing it to scroll sideways. */
+.info{
+  flex:none;
+  width:15px;height:15px;
+  display:grid;place-items:center;
+  font-family:var(--mono);
+  font-size:10px;
+  line-height:1;
+  color:var(--ink-soft);
+  border:var(--hair) solid var(--rule);
+  cursor:help;
+}
+.info:hover, .info:focus-visible{
+  color:var(--paper);
+  background:var(--pen-blue);
+  border-color:var(--pen-blue);
+}
+.info:focus-visible{outline:var(--focus);outline-offset:2px}
+.info::after{
+  content:"";
+  position:absolute;
+  top:calc(100% + 2px);
+  right:2.5px;             /* centred under the 15px marker, which is always last in the row */
+  width:0;height:0;
+  border:5px solid transparent;
+  border-top:none;
+  border-bottom-color:var(--pen-blue);
+  display:none;
+  z-index:3;
+}
+.tip{
+  position:absolute;
+  left:0;right:0;
+  top:calc(100% + 7px);
+  z-index:2;
+  display:none;
+  padding:8px 10px;
+  background:var(--paper-raise);
+  border:var(--line) solid var(--rule-strong);
+  border-top:2px solid var(--pen-blue);
+  font-family:var(--sans);
+  font-size:11.5px;
+  line-height:1.4;
+  letter-spacing:0;
+  text-transform:none;
+  color:var(--ink);
+  cursor:auto;
+}
+.info:hover::after, .info:focus-visible::after,
+.info:hover .tip, .info:focus-visible .tip{display:block}
+
 .swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .sw{
   width:24px;height:24px;
   border:var(--border);
   cursor:pointer;padding:0;
+}
+.sw--none{
+  background:
+    linear-gradient(45deg, transparent 45%, var(--pen-red) 45%, var(--pen-red) 55%, transparent 55%),
+    var(--paper-raise);
 }
 .sw.on{border-color:var(--ink);outline:var(--line) solid var(--ink);outline-offset:1px}
 input[type=color]{
@@ -379,6 +601,7 @@ input[type=color]{
   padding-left:9px;
   margin-top:14px;
 }
+.note--plain{border-left-color:var(--rule-strong)}
 
 .divider{height:var(--line);background:var(--rule-strong);margin:18px 0}
 
@@ -388,10 +611,10 @@ input[type=color]{
   .wrap{grid-template-columns:1fr}
   .col{overflow:visible}
   .col--left{border-right:none;border-bottom:var(--divide)}
-  .col--right{border-left:none;border-top:var(--divide)}
+  .col--right{border-left:none;border-top:var(--divide);padding-bottom:20px}
   .col--stage{display:block}
   .stage{max-height:min(70vw, 520px);margin:0 auto}
 }
 @media (prefers-reduced-motion: reduce){
-  *{transition:none !important}
+  *{transition:none !important; animation:none !important}
 }
