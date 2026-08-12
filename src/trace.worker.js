@@ -1,4 +1,13 @@
-import { fitSize, layeredSvg, analyzeImage } from './trace-core.js'
+import init, { to_svg } from 'vtracer-wasm'
+// the glue's default path resolves to `vtracer_bg.wasm`, but the package ships
+// `vtracer.wasm` — passing the URL explicitly is what keeps init from 404ing
+import wasmUrl from 'vtracer-wasm/vtracer.wasm?url'
+import { fitSize, analyzeImage, finishSvg } from './trace-core.js'
+
+let booting
+/* Instantiates the tracer once and hands back the same promise afterwards.
+   Takes nothing; returns a Promise resolving when the wasm module is live. */
+const engine = () => (booting ??= init({module_or_path: wasmUrl}))
 
 /* Decodes a raster file and reads it back as pixels at the working resolution.
    Takes the source Blob and the longest side allowed in pixels;
@@ -14,10 +23,10 @@ async function pixels(file, maxSide){
 }
 
 /* Handles one request from the main thread: either measuring an image or tracing it.
-   A trace reports progress per colour layer, because a detailed one runs for seconds.
    Takes a message {id, kind, file, maxSide, options} and posts back {id, error} on
-   failure, {id, stats} for kind 'analyze', or {id, progress} updates followed by
-   {id, svg, layers, width, height, ms} for a trace. */
+   failure, {id, stats} for kind 'analyze', or {id, svg, width, height, ms} for a trace.
+   vtracer traces in a single call with no progress callback, so a trace reports only
+   when it lands — hence the working-size ceiling in vector.js. */
 self.onmessage = async ({data}) => {
   const {id, kind, file, maxSide, options} = data
   try{
@@ -29,10 +38,23 @@ self.onmessage = async ({data}) => {
       return
     }
 
-    const {svg, layers} = layeredSvg(image, options, (done, total) =>
-      self.postMessage({id, progress: done / total})
-    )
-    self.postMessage({id, svg, layers, width: image.width, height: image.height, ms: Math.round(performance.now() - started)})
+    await engine()
+    // a bad enum or an out-of-range field aborts the wasm instead of returning; the
+    // instance survives it, so this only has to reach the caller as a normal failure
+    const raw = to_svg(new Uint8Array(image.data.buffer), image.width, image.height, options)
+    const svg = finishSvg(raw, image.width, image.height)
+    // settings can legitimately discard everything — binary mode drops mid-tones whole,
+    // and a large speckle filter eats small art. That returns valid but empty markup,
+    // so it has to be reported rather than shown as a blank board.
+    if(!svg.includes('<path')) throw new Error('emptyTrace')
+
+    self.postMessage({
+      id,
+      svg,
+      width: image.width,
+      height: image.height,
+      ms: Math.round(performance.now() - started)
+    })
   }catch(err){
     self.postMessage({id, error: err?.message || 'traceFail'})
   }

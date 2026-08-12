@@ -11,8 +11,8 @@
     "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
-    "imagetracerjs": "^1.2.6",
     "roughjs": "^4.6.6",
+    "vtracer-wasm": "^0.1.0",
     "vue": "^3.5.41"
   },
   "devDependencies": {

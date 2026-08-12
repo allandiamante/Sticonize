@@ -1,5 +1,3 @@
-import ImageTracer from 'imagetracerjs'
-
 /* Scales a source resolution down so its longest side fits `max`, never scaling up.
    Takes the source width, height and the maximum allowed side in pixels;
    returns {width, height} as positive integers. */
@@ -49,58 +47,14 @@ export function analyzeImage(image){
   return {tones: seen.size, edgeRatio: per(edges), flatRatio: per(flat), alphaRatio: per(translucent)}
 }
 
-/* Formats a quantized palette entry as a hex color, for the layer's data attribute.
-   Takes a {r, g, b} color object and returns a '#rrggbb' string. */
-function hex({r, g, b}){
-  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
-}
-
-/* Traces pixels into layered SVG markup: the palette is walked colour by colour and
-   each one becomes its own <g>, stacked back to front, with the paint hoisted onto
-   the group so the paths inside carry geometry only. Fully transparent palette
-   entries are dropped instead of emitting invisible paths.
-   Takes the ImageData, the imagetracer options object, and an optional callback
-   invoked with (tracedLayers, totalLayers) after every colour;
-   returns {svg, layers} — the markup and how many groups it actually contains. */
-export function layeredSvg(image, options, onLayer){
-  const quantized = ImageTracer.colorquantization(image, options)
-  const palette = quantized.palette
-  const width = (quantized.array[0].length - 2) * options.scale
-  const height = (quantized.array.length - 2) * options.scale
-
-  let body = ''
-  let layers = 0
-
-  for(let c = 0; c < palette.length; c++){
-    if(palette[c].a){
-      const traced = ImageTracer.batchtracepaths(
-        ImageTracer.internodes(
-          ImageTracer.pathscan(ImageTracer.layeringstep(quantized, c), options.pathomit),
-          options
-        ),
-        options.ltres,
-        options.qtres
-      )
-      const one = {layers: [traced], palette: [palette[c]], width, height}
-      let group = ''
-      for(let p = 0; p < traced.length; p++)
-        if(!traced[p].isholepath) group += ImageTracer.svgpathstring(one, 0, p, options)
-
-      if(group){
-        const paint = ImageTracer.tosvgcolorstr(palette[c], options)
-        layers++
-        body += `<g id="layer-${String(layers).padStart(2, '0')}" data-color="${hex(palette[c])}" ${paint}>`
-             + group.split(paint).join('')
-             + '</g>'
-      }
-    }
-    onLayer?.(c + 1, palette.length)
-  }
-
-  return {
-    svg: `<svg viewBox="0 0 ${width} ${height}" version="1.1" xmlns="http://www.w3.org/2000/svg">`
-       + body
-       + '</svg>\n<!-- Vectorized with Sticonize Vector -->',
-    layers
-  }
+/* Makes vtracer's output embeddable. The engine emits an XML prolog, a generator
+   comment and an <svg> carrying width/height but no viewBox — without one the markup
+   cannot scale to the board, and the prolog is invalid inside an HTML document.
+   Takes the raw SVG string and the traced pixel size;
+   returns markup starting at <svg>, with a viewBox and a credit comment. */
+export function finishSvg(svg, width, height){
+  const open = svg.indexOf('<svg ')
+  if(open < 0) throw new Error('traceFail')
+  return svg.slice(open).replace('<svg ', `<svg viewBox="0 0 ${width} ${height}" `).trimEnd()
+       + '\n<!-- Vectorized with Sticonize -->'
 }

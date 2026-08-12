@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import VectorInputPanel from './VectorInputPanel.vue'
 import VectorControlsPanel from './VectorControlsPanel.vue'
-import { trace, analyze, recommend, validateFile, withBackground, countPaths, formatBytes, PRESETS } from '../vector.js'
+import { trace, analyze, recommend, validateFile, withBackground, countPaths, countColors, formatBytes, PRESETS } from '../vector.js'
 import { saveBlob } from '../scribble.js'
 import { t, errText } from '../i18n.js'
 
@@ -14,11 +14,10 @@ const result = ref(null)
 const stats = ref(null)
 const error = ref('')
 const busy = ref(false)
-const progress = ref(0)
 const view = ref('vector')
 const copied = ref(false)
 
-const opts = reactive({...PRESETS.auto, maxSide: 1536, background: 'transparent'})
+const opts = reactive({...PRESETS.auto, maxSide: 1024, background: 'transparent'})
 
 const presets = Object.keys(PRESETS)
 const activePreset = computed(() =>
@@ -39,13 +38,12 @@ const meta = computed(() => {
   if(!result.value) return '—'
   const out = svg.value
   return t.value.vec.meta(
-    result.value.layers, countPaths(out),
+    // counted before the background, whose rect would otherwise read as a traced colour
+    countColors(result.value.svg), countPaths(out),
     result.value.width, result.value.height,
     formatBytes(out.length), (result.value.ms / 1000).toFixed(1)
   )
 })
-
-const percent = computed(() => t.value.vec.tracing(Math.round(progress.value * 100)))
 
 /* Reads the picked file, keeps a preview URL and its natural size, and kicks off a trace.
    Takes the File chosen through the drop zone or file input; returns nothing. */
@@ -101,8 +99,7 @@ async function run(){
       break
     }
     try{
-      progress.value = 0
-      result.value = await trace(file, opts, p => (progress.value = p))
+      result.value = await trace(file, opts)
       error.value = ''
     }catch(err){
       result.value = null
@@ -169,9 +166,9 @@ function stylize(){
       >
         <img v-if="source && view === 'original'" class="stage-art" :src="source.url" alt="">
         <div v-else-if="svg" class="stage-art" v-html="svg"></div>
-        <div v-else-if="source" class="stage-wait">{{ percent }}</div>
+        <div v-else-if="source" class="stage-wait">{{ t.vec.tracing }}</div>
         <div v-else class="stage-mark" v-html="mark" aria-hidden="true"></div>
-        <div v-if="busy && result" class="stage-badge">{{ percent }}</div>
+        <div v-if="busy && result" class="stage-badge">{{ t.vec.tracing }}</div>
       </div>
       <div class="stage-meta">
         <span>{{ source?.name ?? '—' }}</span>

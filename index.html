@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#14181A">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.iconify.design; connect-src 'self' https://api.iconify.design; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <!-- wasm-unsafe-eval: Chromium refuses to compile the vtracer WebAssembly module under a
+       bare script-src 'self'. It permits WebAssembly only — not eval() or inline script. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.iconify.design; connect-src 'self' https://api.iconify.design; object-src 'none'; base-uri 'none'; form-action 'none'">
   <link rel="icon" href="/src/public/sticonize-logo-background.svg">
 
   <title>Sticonize — Turn any SVG icon into a hand-drawn scribble</title>

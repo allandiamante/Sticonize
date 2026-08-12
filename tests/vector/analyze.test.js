@@ -1,7 +1,7 @@
 // The opening pass: measure the image, then propose settings from the measurements.
 import assert from 'node:assert/strict'
 import { analyzeImage } from '../../src/trace-core.js'
-import { recommend, PRESETS, WORK_SIZES } from '../../src/vector.js'
+import { recommend, PRESETS, WORK_SIZES, MAX_COLOR_PRECISION } from '../../src/vector.js'
 
 /* Paints an image from a per-pixel function.
    Takes the canvas side and a callback returning [r, g, b, a] for an (x, y);
@@ -60,15 +60,20 @@ assert.deepEqual(
 // the note is an i18n key, not a sentence — every branch has to name one that exists
 assert.ok(['twoTone', 'lineArt', 'hardEdges', 'flatFills', 'mixed', 'shaded'].includes(pick.note))
 
-// working size never exceeds the 2048 ceiling, and never upsamples a small source
-assert.equal(pick.options.maxSide, 2048)
-assert.equal(recommend(flat, 300, 200).options.maxSide, 512)
+// the guide never proposes a trace past the working-size ceiling, because vtracer runs
+// in one uninterruptible pass — and it never upsamples a small source either
+const top = WORK_SIZES[WORK_SIZES.length - 1]
+assert.equal(pick.options.maxSide, top)
+assert.equal(recommend(flat, 300, 200).options.maxSide, 384)
 assert.ok(WORK_SIZES.includes(recommend(shaded, 900, 900).options.maxSide))
 
 // fine detail buys one step of supersampling, plain artwork does not
 assert.ok(recommend({tones: 900, edgeRatio: 0.4, flatRatio: 0.1}, 700, 700).options.maxSide
         > recommend({tones: 900, edgeRatio: 0.02, flatRatio: 0.1}, 700, 700).options.maxSide)
 
-// colour counts follow the measurement: a two-tone image never asks for 64 colours
-assert.ok(recommend(flat, 256, 256).options.colors <= 4)
-assert.ok(recommend(shaded, 256, 256).options.colors >= 32)
+// colour precision follows the measurement, and never reaches the value that aborts
+// the wasm: a two-tone image asks for less separation than a shaded one
+assert.ok(recommend(flat, 256, 256).options.colorPrecision
+        < recommend(shaded, 256, 256).options.colorPrecision)
+for(const s of [flat, shaded, lines, clipped])
+  assert.ok(recommend(s, 256, 256).options.colorPrecision <= MAX_COLOR_PRECISION)

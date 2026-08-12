@@ -337,7 +337,7 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
   color:var(--ink-soft);
 }
 .guide-pick{
-  margin:9px 0 11px;
+  margin:11px 0 6px;
   font-family:var(--mono);
   font-size:11px;
   color:var(--ink);
@@ -352,7 +352,21 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
   letter-spacing:.06em;
   padding:2px 7px;
 }
+.guide-stats--pick{margin-bottom:11px}
 .guide .btn{margin-bottom:0}
+/* applied is a confirmation, not a dead control: a disabled ghost button washes out to
+   35% opacity and reads as broken rather than as done */
+.guide-done{
+  margin:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--pen-green);
+}
 
 .col--stage{display:flex;flex-direction:column}
 .stage{

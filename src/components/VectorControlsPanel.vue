@@ -1,5 +1,5 @@
 <script setup>
-import { SAMPLING, WORK_SIZES } from '../vector.js'
+import { MODES, STACKING, WORK_SIZES, MAX_COLOR_PRECISION } from '../vector.js'
 import { t } from '../i18n.js'
 import InfoTip from './InfoTip.vue'
 
@@ -21,70 +21,68 @@ const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
     </div>
 
     <div class="divider"></div>
-    <p class="eyebrow">{{ t.vec.detail }}</p>
+    <p class="eyebrow">{{ t.vec.shape }}</p>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="lineThreshold">{{ t.vec.lineThreshold }}</label><output>{{ opts.lineThreshold.toFixed(2) }}</output><InfoTip :tip="t.vec.tips.lineThreshold" /></div>
-      <input id="lineThreshold" type="range" min="0.01" max="10" step="0.01" v-model.number="opts.lineThreshold">
-    </div>
-
-    <div class="ctrl">
-      <div class="ctrl-head"><label for="curveThreshold">{{ t.vec.curveThreshold }}</label><output>{{ opts.curveThreshold.toFixed(2) }}</output><InfoTip :tip="t.vec.tips.curveThreshold" /></div>
-      <input id="curveThreshold" type="range" min="0.01" max="10" step="0.01" v-model.number="opts.curveThreshold">
+      <div class="ctrl-head"><label for="mode">{{ t.vec.mode }}</label><InfoTip :tip="t.vec.tips.mode" /></div>
+      <select id="mode" v-model="opts.mode">
+        <option v-for="m in MODES" :key="m" :value="m">{{ t.vec.modes[m] }}</option>
+      </select>
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="despeckle">{{ t.vec.despeckle }}</label><output>{{ opts.despeckle }} px</output><InfoTip :tip="t.vec.tips.despeckle" /></div>
-      <input id="despeckle" type="range" min="0" max="32" step="1" v-model.number="opts.despeckle">
+      <div class="ctrl-head"><label for="hierarchical">{{ t.vec.stacking }}</label><InfoTip :tip="t.vec.tips.stacking" /></div>
+      <select id="hierarchical" v-model="opts.hierarchical">
+        <option v-for="h in STACKING" :key="h" :value="h">{{ t.vec.stackings[h] }}</option>
+      </select>
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="blur">{{ t.vec.blur }}</label><output>{{ opts.blur }}</output><InfoTip :tip="t.vec.tips.blur" /></div>
-      <input id="blur" type="range" min="0" max="5" step="1" v-model.number="opts.blur">
+      <div class="ctrl-head"><label for="cornerThreshold">{{ t.vec.cornerThreshold }}</label><output>{{ opts.cornerThreshold }}°</output><InfoTip :tip="t.vec.tips.cornerThreshold" /></div>
+      <input id="cornerThreshold" type="range" min="0" max="180" step="1" v-model.number="opts.cornerThreshold">
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="precision">{{ t.vec.precision }}</label><output>{{ opts.precision }}</output><InfoTip :tip="t.vec.tips.precision" /></div>
-      <input id="precision" type="range" min="0" max="3" step="1" v-model.number="opts.precision">
+      <div class="ctrl-head"><label for="lengthThreshold">{{ t.vec.lengthThreshold }}</label><output>{{ opts.lengthThreshold.toFixed(1) }}</output><InfoTip :tip="t.vec.tips.lengthThreshold" /></div>
+      <input id="lengthThreshold" type="range" min="3.5" max="10" step="0.5" v-model.number="opts.lengthThreshold">
     </div>
 
-    <div class="check-row">
-      <label class="check"><input type="checkbox" v-model="opts.sharpCorners"> {{ t.vec.sharpCorners }}</label>
-      <InfoTip :tip="t.vec.tips.sharpCorners" />
+    <div class="ctrl">
+      <div class="ctrl-head"><label for="spliceThreshold">{{ t.vec.spliceThreshold }}</label><output>{{ opts.spliceThreshold }}°</output><InfoTip :tip="t.vec.tips.spliceThreshold" /></div>
+      <input id="spliceThreshold" type="range" min="0" max="180" step="1" v-model.number="opts.spliceThreshold">
     </div>
-    <div class="check-row">
-      <label class="check"><input type="checkbox" v-model="opts.dropTinyPaths"> {{ t.vec.dropTinyPaths }}</label>
-      <InfoTip :tip="t.vec.tips.dropTinyPaths" />
+
+    <div class="ctrl">
+      <div class="ctrl-head"><label for="maxIterations">{{ t.vec.maxIterations }}</label><output>{{ opts.maxIterations }}</output><InfoTip :tip="t.vec.tips.maxIterations" /></div>
+      <input id="maxIterations" type="range" min="1" max="20" step="1" v-model.number="opts.maxIterations">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-head"><label for="pathPrecision">{{ t.vec.pathPrecision }}</label><output>{{ opts.pathPrecision }}</output><InfoTip :tip="t.vec.tips.pathPrecision" /></div>
+      <input id="pathPrecision" type="range" min="0" max="8" step="1" v-model.number="opts.pathPrecision">
     </div>
 
     <div class="divider"></div>
     <p class="eyebrow">{{ t.vec.palette }}</p>
 
-    <div class="ctrl">
-      <div class="ctrl-head"><label for="colors">{{ t.vec.colors }}</label><output>{{ opts.colors }}</output><InfoTip :tip="t.vec.tips.colors" /></div>
-      <input id="colors" type="range" min="2" max="64" step="1" v-model.number="opts.colors">
+    <div class="check-row">
+      <label class="check"><input type="checkbox" v-model="opts.binary"> {{ t.vec.binary }}</label>
+      <InfoTip :tip="t.vec.tips.binary" />
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="cycles">{{ t.vec.cycles }}</label><output>{{ opts.cycles }}</output><InfoTip :tip="t.vec.tips.cycles" /></div>
-      <input id="cycles" type="range" min="1" max="10" step="1" v-model.number="opts.cycles">
+      <div class="ctrl-head"><label for="colorPrecision">{{ t.vec.colorPrecision }}</label><output>{{ opts.colorPrecision }}</output><InfoTip :tip="t.vec.tips.colorPrecision" /></div>
+      <input id="colorPrecision" type="range" min="1" :max="MAX_COLOR_PRECISION" step="1" :disabled="opts.binary" v-model.number="opts.colorPrecision">
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="minRatio">{{ t.vec.minRatio }}</label><output>{{ (opts.minRatio * 100).toFixed(1) }}%</output><InfoTip :tip="t.vec.tips.minRatio" /></div>
-      <input id="minRatio" type="range" min="0" max="0.1" step="0.005" v-model.number="opts.minRatio">
+      <div class="ctrl-head"><label for="layerDifference">{{ t.vec.layerDifference }}</label><output>{{ opts.layerDifference }}</output><InfoTip :tip="t.vec.tips.layerDifference" /></div>
+      <input id="layerDifference" type="range" min="0" max="128" step="1" :disabled="opts.binary" v-model.number="opts.layerDifference">
     </div>
 
     <div class="ctrl">
-      <div class="ctrl-head"><label for="sampling">{{ t.vec.sampling }}</label><InfoTip :tip="t.vec.tips.sampling" /></div>
-      <select id="sampling" v-model.number="opts.sampling">
-        <option v-for="s in SAMPLING" :key="s" :value="s">{{ t.vec.samplings[s] }}</option>
-      </select>
-    </div>
-
-    <div class="ctrl">
-      <div class="ctrl-head"><label for="strokeWidth">{{ t.vec.seam }}</label><output>{{ opts.strokeWidth.toFixed(1) }}</output><InfoTip :tip="t.vec.tips.seam" /></div>
-      <input id="strokeWidth" type="range" min="0" max="3" step="0.5" v-model.number="opts.strokeWidth">
+      <div class="ctrl-head"><label for="filterSpeckle">{{ t.vec.filterSpeckle }}</label><output>{{ opts.filterSpeckle }} px</output><InfoTip :tip="t.vec.tips.filterSpeckle" /></div>
+      <input id="filterSpeckle" type="range" min="0" max="128" step="1" v-model.number="opts.filterSpeckle">
     </div>
 
     <div class="ctrl">

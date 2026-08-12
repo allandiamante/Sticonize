@@ -1,27 +1,52 @@
-// Panel state to tracer options — pure mapping, no DOM and no framework.
+// The panel-to-engine mapping. vtracer aborts the wasm on a field it cannot parse
+// instead of returning an error, so this mapping is a guard, not a rename.
 import assert from 'node:assert/strict'
-import { traceOptions, PRESETS } from '../../src/vector.js'
+import { traceOptions, PRESETS, MODES, STACKING, MAX_COLOR_PRECISION } from '../../src/vector.js'
 
-const opts = traceOptions({...PRESETS.auto, maxSide: 1024, background: '#fff'})
+const ENGINE_KEYS = [
+  'binary', 'mode', 'hierarchical', 'filterSpeckle', 'colorPrecision', 'layerDifference',
+  'cornerThreshold', 'lengthThreshold', 'spliceThreshold', 'maxIterations', 'pathPrecision'
+]
 
-// every UI field lands on the option name imagetracer reads
-assert.equal(opts.numberofcolors, PRESETS.auto.colors)
-assert.equal(opts.colorquantcycles, PRESETS.auto.cycles)
-assert.equal(opts.pathomit, PRESETS.auto.despeckle)
-assert.equal(opts.ltres, PRESETS.auto.lineThreshold)
-assert.equal(opts.qtres, PRESETS.auto.curveThreshold)
-assert.equal(opts.blurradius, PRESETS.auto.blur)
-assert.equal(opts.rightangleenhance, PRESETS.auto.sharpCorners)
-assert.equal(opts.linefilter, PRESETS.auto.dropTinyPaths)
-assert.equal(opts.roundcoords, PRESETS.auto.precision)
-assert.equal(opts.strokewidth, PRESETS.auto.strokeWidth)
+// every preset maps to a complete config, and to nothing the engine does not read
+for(const [name, preset] of Object.entries(PRESETS)){
+  const out = traceOptions({...preset, maxSide: 1024, background: '#fff'})
+  assert.deepEqual(Object.keys(out).sort(), [...ENGINE_KEYS].sort(), `${name} keys`)
+  assert.ok(MODES.includes(out.mode), `${name} mode`)
+  assert.ok(STACKING.includes(out.hierarchical), `${name} stacking`)
+}
 
-// coordinates come out in source pixels, and panel-only fields never leak through
-assert.equal(opts.scale, 1)
-assert.equal(opts.maxSide, undefined)
-assert.equal(opts.background, undefined)
+// panel-only fields never reach the engine
+const mapped = traceOptions({...PRESETS.auto, maxSide: 1024, background: 'transparent'})
+assert.equal(mapped.maxSide, undefined)
+assert.equal(mapped.background, undefined)
 
-// every preset covers the same fields, so switching one never leaves a stale value behind
-const keys = Object.keys(PRESETS.auto).sort().join()
-for(const [name, preset] of Object.entries(PRESETS))
-  assert.equal(Object.keys(preset).sort().join(), keys, `preset ${name} has different fields`)
+// out-of-range numbers are pinned rather than passed through
+const wild = traceOptions({
+  ...PRESETS.auto,
+  colorPrecision: 8, filterSpeckle: -5, layerDifference: 999,
+  cornerThreshold: 400, lengthThreshold: 0.1, spliceThreshold: -12,
+  maxIterations: 0, pathPrecision: 42
+})
+assert.equal(wild.colorPrecision, MAX_COLOR_PRECISION)
+assert.equal(wild.filterSpeckle, 0)
+assert.equal(wild.layerDifference, 128)
+assert.equal(wild.cornerThreshold, 180)
+assert.equal(wild.lengthThreshold, 3.5)
+assert.equal(wild.spliceThreshold, 0)
+assert.equal(wild.maxIterations, 1)
+assert.equal(wild.pathPrecision, 8)
+
+// an unknown enum falls back instead of reaching the engine as garbage
+assert.equal(traceOptions({...PRESETS.auto, mode: 'nope'}).mode, 'spline')
+assert.equal(traceOptions({...PRESETS.auto, hierarchical: 'nope'}).hierarchical, 'stacked')
+
+// binary is a real boolean, whatever the checkbox hands over
+assert.equal(traceOptions({...PRESETS.auto, binary: undefined}).binary, false)
+assert.equal(traceOptions({...PRESETS.mono}).binary, true)
+
+// the integer fields are integers: vtracer parses them as such
+const rounded = traceOptions({...PRESETS.auto, filterSpeckle: 4.7, colorPrecision: 5.2, pathPrecision: 1.6})
+assert.equal(rounded.filterSpeckle, 5)
+assert.equal(rounded.colorPrecision, 5)
+assert.equal(rounded.pathPrecision, 2)

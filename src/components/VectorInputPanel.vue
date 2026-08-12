@@ -72,12 +72,22 @@ function onDrop(e){
 
         <p class="guide-pick">
           <span class="guide-preset">{{ t.vec.presets[suggestion.preset] }}</span>
-          {{ t.vec.pick(suggestion.options.colors, suggestion.options.maxSide, suggestion.options.despeckle) }}
         </p>
 
-        <button class="btn btn--ghost" type="button" :disabled="applied" @click="emit('apply')">
-          {{ applied ? t.vec.applied : t.vec.apply }}
+        <!-- the rows name the controls they would change, so the summary cannot drift
+             away from the panel the way a hand-written sentence did -->
+        <dl class="guide-stats guide-stats--pick">
+          <div><dt>{{ t.vec.workingSize }}</dt><dd>{{ suggestion.options.maxSide }} px</dd></div>
+          <div v-if="!suggestion.options.binary">
+            <dt>{{ t.vec.colorPrecision }}</dt><dd>{{ suggestion.options.colorPrecision }}</dd>
+          </div>
+          <div><dt>{{ t.vec.filterSpeckle }}</dt><dd>{{ suggestion.options.filterSpeckle }} px</dd></div>
+        </dl>
+
+        <button v-if="!applied" class="btn btn--ghost" type="button" @click="emit('apply')">
+          {{ t.vec.apply }}
         </button>
+        <p v-else class="guide-done">✓ {{ t.vec.applied }}</p>
       </div>
     </template>
 
