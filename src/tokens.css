@@ -15,6 +15,7 @@
   /* ink */
   --ink:#E8EDE9;
   --ink-soft:#8B968F;
+  --ink-soft-2:#5c656071;
   --rule:#2C3438;
   --rule-strong:#3C474D;
 
@@ -37,6 +38,7 @@
 
   --ink:#14181A;
   --ink-soft:#5C6560;
+  --ink-soft-2:#5c656071;
   --rule:#C3CCBF;
   --rule-strong:#A3B09F;
 
@@ -65,9 +67,12 @@
   --fs-body:14px;
   --track:.14em;
 
-  /* graph-paper mesh — only the drawing board uses it */
+  /* graph-paper mesh. The board marks the intersections rather than drawing the rules
+     through them — same spacing, a fraction of the ink, so the drawing sits on it instead
+     of inside it. The lines are still what a swatch uses behind a transparent colour. */
   --grid-size:24px;
   --grid-lines:
     linear-gradient(var(--grid) var(--hair), transparent var(--hair)),
     linear-gradient(90deg, var(--grid) var(--hair), transparent var(--hair));
+  --grid-dots: radial-gradient(circle, var(--grid) 0 1px, transparent 1.4px);
 }

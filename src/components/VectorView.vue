@@ -1,8 +1,8 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import VectorInputPanel from './VectorInputPanel.vue'
 import VectorControlsPanel from './VectorControlsPanel.vue'
-import { trace, refine, validateFile, withBackground, editPaths, swapFills, shapeFills, countPaths, countColors, formatBytes, PRESETS } from '../vector.js'
+import { trace, refine, validateFile, withBackground, editPaths, swapFills, shapeFills, countPaths, countColors, formatBytes, recordEdit, sealEdit, undoEdit, PRESETS } from '../vector.js'
 import { saveBlob } from '../scribble.js'
 import { t, errText } from '../i18n.js'
 
@@ -20,6 +20,11 @@ const phase = ref('')
 
 const opts = reactive({...PRESETS.auto, maxSide: 1024, colors: 8, threshold: 0, background: 'transparent'})
 
+// both start tucked away. The board is what the page is for, and the tuning column is a
+// wall of sliders no one needs open to drop an image and look at what came back.
+const showOptions = ref(false)
+const showPresets = ref(false)
+
 const presets = Object.keys(PRESETS)
 const activePreset = computed(() =>
   presets.find(n => Object.entries(PRESETS[n]).every(([k, v]) => opts[k] === v))
@@ -31,12 +36,27 @@ const selected = ref(null)
 const editCount = computed(() => Object.keys(edits).length)
 const swapCount = computed(() => Object.keys(swaps).length)
 
+// one entry per shape edit or palette swap, in the order they happened — each records
+// which reactive map it touched and what was there before, so undo just puts it back
+const history = []
+
 // the indices and the colours only mean anything against the trace they were made on
 watch(result, () => {
   selected.value = null
   for(const k of Object.keys(edits)) delete edits[k]
   for(const k of Object.keys(swaps)) delete swaps[k]
+  history.length = 0
 })
+
+/* Ctrl/Cmd+Z undoes the last edit or swap; browsers have no native undo to fight here
+   since the board isn't an editable text field. */
+function onKeydown(e){
+  if(!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return
+  e.preventDefault()
+  undoEdit(history)
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 // the palette swaps come first and the per-shape edits are laid over them, so recolouring
 // a whole colour never undoes a shape someone painted by hand
@@ -68,12 +88,23 @@ function onStagePick(e){
 /* Repaints the selected shape.
    Takes a CSS colour; returns nothing. */
 function paintSelected(fill){
+  recordEdit(history, edits, selected.value)
   edits[selected.value] = {...edits[selected.value], fill}
+}
+
+/* Ends the step a colour picker was holding open, so the next drag undoes on its own.
+   Takes nothing; returns nothing. */
+function endPick(){
+  sealEdit(history)
 }
 
 /* Drops the selected shape from the drawing and clears the selection.
    Takes nothing; returns nothing. */
 function dropSelected(){
+  // a delete is one deliberate click, never part of the drag that may have preceded it
+  sealEdit(history)
+  recordEdit(history, edits, selected.value)
+  sealEdit(history)
   edits[selected.value] = {...edits[selected.value], removed: true}
   selected.value = null
 }
@@ -83,6 +114,7 @@ function dropSelected(){
 function resetEdits(){
   for(const k of Object.keys(edits)) delete edits[k]
   selected.value = null
+  history.length = 0
 }
 
 /* Redraws one of the palette's colours everywhere it appears.
@@ -90,6 +122,7 @@ function resetEdits(){
    to what it was drops the swap rather than recording one. Returns nothing. */
 function swapColor(from, to){
   const next = to.toLowerCase()
+  recordEdit(history, swaps, from)
   if(next === from) delete swaps[from]
   else swaps[from] = next
 }
@@ -98,6 +131,7 @@ function swapColor(from, to){
    Takes nothing; returns nothing. */
 function resetColors(){
   for(const k of Object.keys(swaps)) delete swaps[k]
+  history.length = 0
 }
 
 const meta = computed(() => {
@@ -121,15 +155,6 @@ const meta = computed(() => {
 // what the board says while it waits: the refine pass names its step, the fast trace has
 // nothing to report between starting and landing
 const waiting = computed(() => phase.value ? t.value.vec.phases[phase.value] : t.value.vec.tracing)
-
-// the board takes the drawing's proportions rather than a fixed square. A tall image in a
-// square is letterboxed into a strip down the middle, with most of the board empty and the
-// drawing too small to click a shape in — and on a wide one the square is what runs the
-// board past the column. Taken from the source, so it does not jump between traces.
-const frame = computed(() => {
-  const s = source.value
-  return s ? {aspectRatio: `${s.width} / ${s.height}`} : null
-})
 
 /* How far in the board goes. Past about sixteen times a traced shape is a wall of colour
    with its edges off screen, which is no longer looking closely at anything. */
@@ -294,7 +319,7 @@ function stylize(){
 </script>
 
 <template>
-  <div class="wrap">
+  <div class="wrap" :class="{'wrap--tucked': !showOptions}">
     <VectorInputPanel
       :source="source"
       :error="error"
@@ -310,7 +335,6 @@ function stylize(){
       <div
         class="stage"
         :class="{empty: !source, 'stage--edit': board && view === 'vector'}"
-        :style="frame"
         :data-hint="t.vec.emptyHint"
         @click="view === 'vector' && onStagePick($event)"
         @wheel.prevent="source && onWheel($event)"
@@ -331,7 +355,7 @@ function stylize(){
       <div v-if="selected !== null" class="shape-bar">
         <label class="shape-swatch" :title="t.vec.shapeColor">
           <span :style="{background: selectedFill}"></span>
-          <input type="color" :value="selectedFill" @input="paintSelected($event.target.value)">
+          <input type="color" :value="selectedFill" @input="paintSelected($event.target.value)" @change="endPick">
         </label>
         <span class="shape-id">{{ selectedFill }}</span>
         <button type="button" class="chip" @click="dropSelected">{{ t.vec.deleteShape }}</button>
@@ -356,7 +380,7 @@ function stylize(){
             :title="t.vec.paletteColor"
           >
             <span :style="{background: swaps[c] ?? c}"></span>
-            <input type="color" :value="swaps[c] ?? c" @input="swapColor(c, $event.target.value)">
+            <input type="color" :value="swaps[c] ?? c" @input="swapColor(c, $event.target.value)" @change="endPick">
           </label>
           <button v-if="swapCount" type="button" class="chip" @click="resetColors">{{ t.vec.resetColors }}</button>
         </div>
@@ -371,8 +395,22 @@ function stylize(){
 
       <div class="divider"></div>
 
-      <p class="eyebrow">{{ t.vec.imageType }}</p>
-      <div class="presets">
+      <p class="eyebrow">
+        {{ t.vec.imageType }}
+        <button
+          type="button"
+          class="tuck"
+          :aria-expanded="showPresets"
+          :title="t.vec.moreOptions"
+          @click="showPresets = !showPresets"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span class="sr-only">{{ t.vec.moreOptions }}</span>
+        </button>
+      </p>
+      <div v-if="showPresets" class="presets">
         <button
           v-for="p in presets"
           :key="p"
@@ -390,10 +428,12 @@ function stylize(){
       :copied="copied"
       :refining="!!phase"
       :can-refine="!!source && !busy"
+      :open="showOptions"
       @download="download"
       @copy="copy"
       @stylize="stylize"
       @refine="runRefine"
+      @toggle="showOptions = !showOptions"
     />
   </div>
 </template>

@@ -3,14 +3,33 @@ import { MODES, STACKING, TONES, WORK_SIZES, MAX_COLOR_PRECISION, MAX_THRESHOLD 
 import { t } from '../i18n.js'
 import InfoTip from './InfoTip.vue'
 
-defineProps({ opts: Object, canExport: Boolean, copied: Boolean, refining: Boolean, canRefine: Boolean })
-const emit = defineEmits(['download', 'copy', 'stylize', 'refine'])
+defineProps({ opts: Object, canExport: Boolean, copied: Boolean, refining: Boolean, canRefine: Boolean, open: Boolean })
+const emit = defineEmits(['download', 'copy', 'stylize', 'refine', 'toggle'])
 
 const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
 </script>
 
 <template>
-  <section class="col col--right">
+  <section class="col col--right" :class="{'col--tucked': !open}">
+    <!-- the only thing the rail carries: everything below it is the wall of sliders this
+         opens. Sliders, because that is what is behind it. -->
+    <button
+      type="button"
+      class="tuck"
+      :aria-expanded="open"
+      :title="t.vec.moreOptions"
+      @click="emit('toggle')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h9M17 18h3"/>
+        <circle cx="16" cy="6" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="9" cy="12" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="15" cy="18" r="2" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="sr-only">{{ t.vec.moreOptions }}</span>
+    </button>
+
+    <template v-if="open">
     <p class="eyebrow">{{ t.vec.resolution }}</p>
 
     <div class="ctrl">
@@ -125,5 +144,6 @@ const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
     <button class="btn" :disabled="!canExport" @click="emit('download')">{{ t.vec.download }}</button>
     <button class="btn btn--ghost" :disabled="!canExport" @click="emit('copy')">{{ copied ? t.vec.copied : t.vec.copy }}</button>
     <button class="btn btn--ghost" :disabled="!canExport" @click="emit('stylize')">{{ t.vec.stylize }}</button>
+    </template>
   </section>
 </template>

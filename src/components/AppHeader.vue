@@ -48,7 +48,6 @@ const sheet = i => String(i + 1).padStart(2, '0')
           @click="setTheme(x)"
         >{{ x === 'dark' ? '☾' : '☀' }}</button>
       </div>
-      <div class="stamp">{{ page === 'vector' ? t.vec.stamp : t.stamp }}</div>
     </div>
   </header>
 

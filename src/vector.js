@@ -161,6 +161,37 @@ export function editPaths(svg, edits, tagged = false, selected = null){
   })
 }
 
+/* Records what a reactive map held at a key just before it changes, so undoEdit can put
+   it back — the recolour or delete itself still happens at the call site.
+   A colour input fires all the way through a drag in the picker, hundreds of times for
+   one colour someone picked once, so a record that lands on the key the open step is
+   already holding folds into it: the whole drag undoes as one step. sealEdit ends it.
+   Takes the history array, the map about to change, and the key; returns nothing. */
+export function recordEdit(history, map, key){
+  const top = history[history.length - 1]
+  if(top?.open && top.map === map && top.key === key) return
+  history.push({map, key, prev: map[key], open: true})
+}
+
+/* Closes the step on top of the history, so the next record starts a new one rather than
+   folding into it — what a colour input's change event marks, and what keeps a second
+   drag on the same swatch from disappearing into the first.
+   Takes the history array; returns nothing. */
+export function sealEdit(history){
+  const top = history[history.length - 1]
+  if(top) top.open = false
+}
+
+/* Reverses the most recently recorded change: a key that had nothing before is deleted,
+   otherwise it's put back to what it held.
+   Takes the history array; returns nothing. */
+export function undoEdit(history){
+  const last = history.pop()
+  if(!last) return
+  if(last.prev === undefined) delete last.map[last.key]
+  else last.map[last.key] = last.prev
+}
+
 /* Formats a byte count for display.
    Takes a number of bytes and returns a short human-readable string. */
 export function formatBytes(n){
