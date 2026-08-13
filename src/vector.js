@@ -6,6 +6,11 @@ export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
    of path data, and 2048 costs four times that. The list stops where the wait does. */
 export const WORK_SIZES = [384, 512, 768, 1024, 1280, 1536]
 
+/* The palette size the image is reduced to before tracing. Two is the smallest that
+   still carries a shape; past ~32 the palette stops being something anyone picks. */
+export const MIN_COLORS = 2
+export const MAX_COLORS = 32
+
 export const MODES = ['spline', 'polygon', 'pixel']
 export const STACKING = ['stacked', 'cutout']
 
@@ -30,70 +35,9 @@ export const PRESETS = {
   mono:    {binary:true,  mode:'spline',  hierarchical:'stacked', filterSpeckle:8,  colorPrecision:1, layerDifference:64, cornerThreshold:45, lengthThreshold:4,   spliceThreshold:30, maxIterations:10, pathPrecision:2}
 }
 
-export const ANALYZE_SIDE = 512
-
 /* Clamps a number into a range.
    Takes the value, the lower bound and the upper bound; returns the clamped number. */
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
-
-/* Turns a measured image into the settings it is likely to trace best with. This is a
-   starting point shown as a guide, not something applied behind the user's back — the
-   measurements it is based on are shown next to it.
-   Takes the stats from analyzeImage plus the source image's pixel width and height;
-   returns {preset, options, note} — the preset it picked, a full options patch with the
-   colour precision, speckle filter and working size tuned to this image, and a
-   t.vec.notes key explaining the choice. */
-export function recommend(stats, width, height){
-  const {tones, edgeRatio, flatRatio} = stats
-  const flat = flatRatio >= 0.55
-
-  let preset, note
-  if(tones <= 4){
-    preset = 'mono'
-    note = 'twoTone'
-  }else if(tones <= 24 && edgeRatio >= 0.15){
-    preset = 'drawing'
-    note = 'lineArt'
-  }else if(flatRatio >= 0.85){
-    preset = tones <= 64 ? 'logo' : 'clipart'
-    note = 'hardEdges'
-  }else if(flat){
-    preset = 'clipart'
-    note = 'flatFills'
-  }else if(flatRatio >= 0.3){
-    preset = 'auto'
-    note = 'mixed'
-  }else{
-    preset = 'photo'
-    note = 'shaded'
-  }
-
-  // raising colorPrecision merges regions in this build, so it buys file size, not
-  // fidelity. Flat artwork has few regions and nothing to gain, so it stays at the
-  // faithful end; only a busy image is worth simplifying, and then on a log scale
-  // because the region count is what runs away.
-  const colorPrecision = flat
-    ? 1
-    : clamp(Math.round(Math.log2(Math.max(tones, 2)) / 4), 1, MAX_COLOR_PRECISION)
-
-  // never trace above the source resolution; the ceiling keeps a 10 MB photo from
-  // proposing a trace that runs for seconds and emits megabytes of path data
-  const native = Math.max(width, height)
-  const wanted = edgeRatio >= 0.2 ? native * 1.5 : native
-  const top = WORK_SIZES[WORK_SIZES.length - 1]
-  const maxSide = Math.min(WORK_SIZES.find(s => s >= wanted) ?? top, top)
-
-  return {
-    preset,
-    note,
-    options: {
-      ...PRESETS[preset],
-      colorPrecision,
-      filterSpeckle: edgeRatio >= 0.3 ? 8 : PRESETS[preset].filterSpeckle,
-      maxSide
-    }
-  }
-}
 
 /* Rejects a file the tracer cannot handle, before any decoding work is spent on it.
    Takes a File (only `type` and `size` are read) and returns nothing;
@@ -131,6 +75,42 @@ export function traceOptions(o){
 export function withBackground(svg, color){
   if(!color || color === 'transparent') return svg
   return svg.replace(/<svg[^>]*>/, m => `${m}<rect width="100%" height="100%" fill="${color}"/>`)
+}
+
+// vtracer emits flat, self-closing shapes with no nesting, which is why they can be
+// rewritten by pattern rather than parsed
+const SHAPE = /<path\b[^>]*?\/>/g
+
+/* Sets a shape's fill, adding the attribute when the shape has none — binary traces
+   emit shapes that inherit their colour instead of carrying one.
+   Takes the shape's markup and a CSS colour; returns the rewritten markup. */
+const paint = (shape, fill) => /\sfill="/.test(shape)
+  ? shape.replace(/\sfill="[^"]*"/, ` fill="${fill}"`)
+  : shape.replace('<path', `<path fill="${fill}"`)
+
+/* Reads the colour of every shape in a trace, in order.
+   Takes the traced SVG; returns an array of CSS colour strings. */
+export function shapeFills(svg){
+  return [...svg.matchAll(SHAPE)].map(m => (m[0].match(/\sfill="([^"]*)"/) || [, '#000000'])[1])
+}
+
+/* Applies the per-shape edits to traced markup. Shapes are numbered by their position
+   in the untouched trace, so deleting one never renumbers the ones after it and a
+   selection stays pointing at the same shape.
+   Takes the traced SVG, the edits keyed by shape index, whether to tag each shape with
+   its index for the board, and which index is selected. The tags and the selection are
+   board-only: the export must not carry them.
+   Returns the rewritten markup. */
+export function editPaths(svg, edits, tagged = false, selected = null){
+  let i = -1
+  return svg.replace(SHAPE, shape => {
+    const n = ++i
+    const edit = edits?.[n]
+    if(edit?.removed) return ''
+    let out = edit?.fill ? paint(shape, edit.fill) : shape
+    if(tagged) out = out.replace('<path', `<path data-shape="${n}"${n === selected ? ' class="sel"' : ''}`)
+    return out
+  })
 }
 
 /* Formats a byte count for display.
@@ -175,23 +155,17 @@ function tracer(){
 /* Traces one raster image into SVG off the main thread, so the panel stays responsive
    while the trace runs.
    Takes the source File and the panel options object;
-   returns a Promise of {svg, width, height, ms} — the traced markup, the working
-   resolution it was traced at, and the trace time in milliseconds. */
+   returns a Promise of {svg, palette, width, height, ms} — the traced markup, the
+   palette it was reduced to, the working resolution, and the trace time in ms. */
 export function trace(file, opts){
   const id = ++nextId
   return new Promise((resolve, reject) => {
     pending.set(id, {resolve, reject})
-    tracer().postMessage({id, kind: 'trace', file, maxSide: opts.maxSide, options: traceOptions(opts)})
+    tracer().postMessage({
+      id, file,
+      maxSide: opts.maxSide,
+      colors: clamp(Math.round(opts.colors), MIN_COLORS, MAX_COLORS),
+      options: traceOptions(opts)
+    })
   })
-}
-
-/* Measures an image so the panel can suggest settings for it, before any trace runs.
-   Takes the source File;
-   returns a Promise of the stats object described on analyzeImage. */
-export function analyze(file){
-  const id = ++nextId
-  return new Promise((resolve, reject) => {
-    pending.set(id, {resolve, reject})
-    tracer().postMessage({id, kind: 'analyze', file, maxSide: ANALYZE_SIDE})
-  }).then(data => data.stats)
 }

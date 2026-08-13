@@ -1,16 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { ACCEPTED_TYPES, MAX_BYTES, formatBytes } from '../vector.js'
+import { ACCEPTED_TYPES, MAX_BYTES, MIN_COLORS, MAX_COLORS, formatBytes } from '../vector.js'
 import { t } from '../i18n.js'
+import InfoTip from './InfoTip.vue'
 
-defineProps({ source: Object, error: String, stats: Object, suggestion: Object, applied: Boolean })
-const emit = defineEmits(['file', 'clear', 'apply'])
+defineProps({ source: Object, error: String, colors: Number, palette: Array, busy: Boolean })
+const emit = defineEmits(['file', 'clear', 'colors'])
 
 const hot = ref(false)
-
-/* Formats a 0..1 ratio for the measurement list.
-   Takes the ratio and returns a rounded percentage string. */
-const pct = n => `${Math.round(n * 100)}%`
 
 /* Forwards the first dropped file and clears the drag highlight.
    Takes the DragEvent; returns nothing. */
@@ -56,42 +53,35 @@ function onDrop(e){
     </div>
 
     <template v-if="source">
-      <p class="eyebrow eyebrow--gap">{{ t.vec.suggested }}</p>
+      <p class="eyebrow eyebrow--gap">{{ t.vec.palette }}</p>
 
-      <p v-if="!stats" class="search-msg">{{ t.vec.measuring }}</p>
-
-      <div v-else class="guide">
-        <dl class="guide-stats">
-          <div><dt>{{ t.vec.tones }}</dt><dd>{{ stats.tones >= 40000 ? '40 000+' : stats.tones.toLocaleString('en') }}</dd></div>
-          <div><dt>{{ t.vec.flatAreas }}</dt><dd>{{ pct(stats.flatRatio) }}</dd></div>
-          <div><dt>{{ t.vec.edgePixels }}</dt><dd>{{ pct(stats.edgeRatio) }}</dd></div>
-          <div><dt>{{ t.vec.transparency }}</dt><dd>{{ stats.alphaRatio >= 0.01 ? pct(stats.alphaRatio) : t.vec.none }}</dd></div>
-        </dl>
-
-        <p class="guide-note">{{ t.vec.notes[suggestion.note] }}</p>
-
-        <p class="guide-pick">
-          <span class="guide-preset">{{ t.vec.presets[suggestion.preset] }}</span>
-        </p>
-
-        <!-- the rows name the controls they would change, so the summary cannot drift
-             away from the panel the way a hand-written sentence did -->
-        <dl class="guide-stats guide-stats--pick">
-          <div><dt>{{ t.vec.workingSize }}</dt><dd>{{ suggestion.options.maxSide }} px</dd></div>
-          <div v-if="!suggestion.options.binary">
-            <dt>{{ t.vec.colorPrecision }}</dt><dd>{{ suggestion.options.colorPrecision }}</dd>
-          </div>
-          <div><dt>{{ t.vec.filterSpeckle }}</dt><dd>{{ suggestion.options.filterSpeckle }} px</dd></div>
-        </dl>
-
-        <button v-if="!applied" class="btn btn--ghost" type="button" @click="emit('apply')">
-          {{ t.vec.apply }}
-        </button>
-        <p v-else class="guide-done">✓ {{ t.vec.applied }}</p>
+      <div class="ctrl">
+        <div class="ctrl-head">
+          <label for="colorCount">{{ t.vec.colorCount }}</label>
+          <output>{{ colors }}</output>
+          <InfoTip :tip="t.vec.tips.colorCount" />
+        </div>
+        <input
+          id="colorCount"
+          type="range"
+          :min="MIN_COLORS"
+          :max="MAX_COLORS"
+          step="1"
+          :value="colors"
+          @input="emit('colors', Number($event.target.value))"
+        >
       </div>
+
+      <!-- the palette is what the last trace actually landed on, so while a new one runs
+           it is one step behind — dimmed rather than hidden, which would make the whole
+           panel jump on every step of the slider -->
+      <div v-if="palette.length" class="palette" :class="{stale: busy}">
+        <span v-for="(c, i) in palette" :key="i" class="palette-chip" :style="{background: c}" :title="c"></span>
+      </div>
+      <p v-else class="search-msg">{{ t.vec.reading }}</p>
     </template>
 
-    <p class="note">{{ t.vec.guideNote }}</p>
+    <p class="note">{{ t.vec.colorNote }}</p>
 
     <p class="eyebrow eyebrow--gap">{{ t.vec.privacy }}</p>
     <p class="note note--plain">{{ t.vec.privacyNote }}</p>

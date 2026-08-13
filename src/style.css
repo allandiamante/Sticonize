@@ -279,7 +279,7 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 }
 .queue .kill:hover{color:var(--pen-red)}
 
-/* vectorize tab: the picked source image and the setup it suggests */
+/* vectorize tab: the picked source image */
 .source{
   display:flex;
   align-items:center;
@@ -314,58 +314,19 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 }
 .source .kill:hover{color:var(--pen-red)}
 
-.guide{
-  border:var(--line) solid var(--rule-strong);
-  background:var(--wash);
-  padding:11px 12px;
-}
-.guide-stats{margin:0;font-family:var(--mono);font-size:11px}
-.guide-stats div{
+/* The palette the trace landed on. Chips are read-only here — recolouring happens on
+   the drawing itself, where you can see which shape you are changing. */
+.palette{
   display:flex;
-  justify-content:space-between;
-  gap:10px;
-  padding:3px 0;
-  border-bottom:var(--hair) solid var(--rule);
-}
-.guide-stats div:last-child{border-bottom:none}
-.guide-stats dt{color:var(--ink-soft)}
-.guide-stats dd{margin:0;color:var(--ink)}
-.guide-note{
-  margin:10px 0 0;
-  font-size:11.5px;
-  line-height:1.4;
-  color:var(--ink-soft);
-}
-.guide-pick{
-  margin:11px 0 6px;
-  font-family:var(--mono);
-  font-size:11px;
-  color:var(--ink);
-  display:flex;
-  align-items:center;
   flex-wrap:wrap;
-  gap:6px;
+  gap:4px;
+  margin-top:2px;
+  transition:opacity .15s;
 }
-.guide-preset{
-  background:var(--ink);
-  color:var(--paper);
-  letter-spacing:.06em;
-  padding:2px 7px;
-}
-.guide-stats--pick{margin-bottom:11px}
-.guide .btn{margin-bottom:0}
-/* applied is a confirmation, not a dead control: a disabled ghost button washes out to
-   35% opacity and reads as broken rather than as done */
-.guide-done{
-  margin:0;
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-family:var(--mono);
-  font-size:11px;
-  letter-spacing:.06em;
-  text-transform:uppercase;
-  color:var(--pen-green);
+.palette.stale{opacity:.45}
+.palette-chip{
+  width:22px;height:22px;
+  border:var(--hair) solid var(--rule);
 }
 
 .col--stage{display:flex;flex-direction:column}
@@ -387,8 +348,50 @@ textarea:focus{outline:var(--focus); outline-offset:1px}
 .stage-art{width:100%;height:100%;object-fit:contain}
 .stage svg{width:100%;height:100%;display:block}
 .stage-error{font-size:12px;color:var(--pen-red);text-align:center;padding:16px}
-.stage--send{cursor:pointer}
-.stage--send:hover{border-color:var(--pen-red)}
+/* Shape picking on the traced drawing. non-scaling-stroke is what keeps the highlight
+   one screen pixel wide whatever the trace's viewBox is — a plain stroke-width is in
+   viewBox units, so it would be invisible at 1536 and heavy at 384. */
+.stage--edit path{cursor:pointer}
+.stage--edit path:hover{
+  stroke:var(--pen-blue);
+  stroke-width:2;
+  vector-effect:non-scaling-stroke;
+}
+.stage--edit path.sel{
+  stroke:var(--pen-red);
+  stroke-width:2.5;
+  vector-effect:non-scaling-stroke;
+}
+
+.shape-bar{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+  margin-top:9px;
+}
+.shape-swatch{position:relative;display:block;width:24px;height:24px;flex:none;cursor:pointer}
+.shape-swatch span{
+  display:block;width:100%;height:100%;
+  border:var(--border);
+  background-image:var(--grid-lines);
+  background-size:8px 8px;
+}
+.shape-swatch input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.shape-id{
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.06em;
+  color:var(--ink-soft);
+  margin-right:auto;
+}
+.shape-hint{
+  margin:9px 0 0;
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.06em;
+  color:var(--ink-soft);
+}
 .stage-wait, .stage-badge{
   font-family:var(--mono);
   font-size:11.5px;

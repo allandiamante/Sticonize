@@ -2,7 +2,7 @@ import init, { to_svg } from 'vtracer-wasm'
 // the glue's default path resolves to `vtracer_bg.wasm`, but the package ships
 // `vtracer.wasm` — passing the URL explicitly is what keeps init from 404ing
 import wasmUrl from 'vtracer-wasm/vtracer.wasm?url'
-import { fitSize, analyzeImage, finishSvg } from './trace-core.js'
+import { fitSize, quantize, snapFills, finishSvg } from './trace-core.js'
 
 let booting
 /* Instantiates the tracer once and hands back the same promise afterwards.
@@ -22,27 +22,25 @@ async function pixels(file, maxSide){
   return ctx.getImageData(0, 0, width, height)
 }
 
-/* Handles one request from the main thread: either measuring an image or tracing it.
-   Takes a message {id, kind, file, maxSide, options} and posts back {id, error} on
-   failure, {id, stats} for kind 'analyze', or {id, svg, width, height, ms} for a trace.
+/* Traces one image.
+   Takes a message {id, file, maxSide, colors, options} and posts back {id, error} on
+   failure or {id, svg, palette, width, height, ms} on success.
    vtracer traces in a single call with no progress callback, so a trace reports only
    when it lands — hence the working-size ceiling in vector.js. */
 self.onmessage = async ({data}) => {
-  const {id, kind, file, maxSide, options} = data
+  const {id, file, maxSide, colors, options} = data
   try{
     const started = performance.now()
     const image = await pixels(file, maxSide)
-
-    if(kind === 'analyze'){
-      self.postMessage({id, stats: analyzeImage(image)})
-      return
-    }
+    // the palette is decided here, before the tracer sees anything: it has no
+    // colour-count setting, and it re-derives colours per region on the way out
+    const palette = quantize(image, colors)
 
     await engine()
     // a bad enum or an out-of-range field aborts the wasm instead of returning; the
     // instance survives it, so this only has to reach the caller as a normal failure
     const raw = to_svg(new Uint8Array(image.data.buffer), image.width, image.height, options)
-    const svg = finishSvg(raw, image.width, image.height)
+    const svg = snapFills(finishSvg(raw, image.width, image.height), palette)
     // settings can legitimately discard everything — binary mode drops mid-tones whole,
     // and a large speckle filter eats small art. That returns valid but empty markup,
     // so it has to be reported rather than shown as a blank board.
@@ -51,6 +49,7 @@ self.onmessage = async ({data}) => {
     self.postMessage({
       id,
       svg,
+      palette,
       width: image.width,
       height: image.height,
       ms: Math.round(performance.now() - started)
