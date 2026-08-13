@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import VectorInputPanel from './VectorInputPanel.vue'
 import VectorControlsPanel from './VectorControlsPanel.vue'
-import { trace, validateFile, withBackground, editPaths, shapeFills, countPaths, countColors, formatBytes, PRESETS } from '../vector.js'
+import { trace, refine, validateFile, withBackground, editPaths, swapFills, shapeFills, countPaths, countColors, formatBytes, PRESETS } from '../vector.js'
 import { saveBlob } from '../scribble.js'
 import { t, errText } from '../i18n.js'
 
@@ -15,8 +15,10 @@ const error = ref('')
 const busy = ref(false)
 const view = ref('vector')
 const copied = ref(false)
+// the step a refine pass is on, '' when the fast trace is running or nothing is
+const phase = ref('')
 
-const opts = reactive({...PRESETS.auto, maxSide: 1024, colors: 8, background: 'transparent'})
+const opts = reactive({...PRESETS.auto, maxSide: 1024, colors: 8, threshold: 0, background: 'transparent'})
 
 const presets = Object.keys(PRESETS)
 const activePreset = computed(() =>
@@ -24,26 +26,34 @@ const activePreset = computed(() =>
 )
 
 const edits = reactive({})
+const swaps = reactive({})
 const selected = ref(null)
 const editCount = computed(() => Object.keys(edits).length)
+const swapCount = computed(() => Object.keys(swaps).length)
 
-// the indices only mean anything against the trace they were made on
+// the indices and the colours only mean anything against the trace they were made on
 watch(result, () => {
   selected.value = null
   for(const k of Object.keys(edits)) delete edits[k]
+  for(const k of Object.keys(swaps)) delete swaps[k]
 })
 
+// the palette swaps come first and the per-shape edits are laid over them, so recolouring
+// a whole colour never undoes a shape someone painted by hand
+const recolored = computed(() => result.value && swapFills(result.value.svg, swaps))
+
 // what gets exported: the edits, and nothing about what is selected on screen
-const edited = computed(() => result.value && editPaths(result.value.svg, edits))
+const edited = computed(() => recolored.value && editPaths(recolored.value, edits))
 const svg = computed(() => edited.value && withBackground(edited.value, opts.background))
 
 // what gets drawn: the same, plus the index tags a click reads and the selection mark
 const board = computed(() =>
-  result.value && withBackground(editPaths(result.value.svg, edits, true, selected.value), opts.background))
+  recolored.value && withBackground(editPaths(recolored.value, edits, true, selected.value), opts.background))
 
+// the palette as the trace produced it — what a swap is keyed on, whatever it now draws as
 const palette = computed(() => result.value?.palette ?? [])
 
-const fills = computed(() => result.value ? shapeFills(result.value.svg) : [])
+const fills = computed(() => recolored.value ? shapeFills(recolored.value) : [])
 const selectedFill = computed(() =>
   selected.value === null ? null : edits[selected.value]?.fill ?? fills.value[selected.value])
 
@@ -75,16 +85,100 @@ function resetEdits(){
   selected.value = null
 }
 
+/* Redraws one of the palette's colours everywhere it appears.
+   Takes the colour as the trace produced it and the colour to draw it in; setting it back
+   to what it was drops the swap rather than recording one. Returns nothing. */
+function swapColor(from, to){
+  const next = to.toLowerCase()
+  if(next === from) delete swaps[from]
+  else swaps[from] = next
+}
+
+/* Puts every swapped colour back the way the trace produced it.
+   Takes nothing; returns nothing. */
+function resetColors(){
+  for(const k of Object.keys(swaps)) delete swaps[k]
+}
+
 const meta = computed(() => {
   if(!result.value) return '—'
   const out = svg.value
-  return t.value.vec.meta(
+  const line = t.value.vec.meta(
     // counted before the background, whose rect would otherwise read as a traced colour
     countColors(edited.value), countPaths(out),
     result.value.width, result.value.height,
     formatBytes(out.length), (result.value.ms / 1000).toFixed(1)
   )
+  // a minute of work is worth saying out loud, not least because touching any option
+  // re-traces the fast way and drops it
+  const parts = [line]
+  if(result.value.refined) parts.push(t.value.vec.refined)
+  // there is no other sign the board is zoomed once the drawing fills it
+  if(zoom.value !== 1) parts.push(`${Math.round(zoom.value * 100)}%`)
+  return parts.join(' · ')
 })
+
+// what the board says while it waits: the refine pass names its step, the fast trace has
+// nothing to report between starting and landing
+const waiting = computed(() => phase.value ? t.value.vec.phases[phase.value] : t.value.vec.tracing)
+
+// the board takes the drawing's proportions rather than a fixed square. A tall image in a
+// square is letterboxed into a strip down the middle, with most of the board empty and the
+// drawing too small to click a shape in — and on a wide one the square is what runs the
+// board past the column. Taken from the source, so it does not jump between traces.
+const frame = computed(() => {
+  const s = source.value
+  return s ? {aspectRatio: `${s.width} / ${s.height}`} : null
+})
+
+/* How far in the board goes. Past about sixteen times a traced shape is a wall of colour
+   with its edges off screen, which is no longer looking closely at anything. */
+const ZOOM_MAX = 16
+
+const zoom = ref(1)
+const pan = reactive({x: 0, y: 0})
+
+// a new image starts fitted to the frame
+watch(source, resetZoom)
+
+/* Puts the board back to fitting the frame.
+   Takes nothing; returns nothing. */
+function resetZoom(){
+  zoom.value = 1
+  pan.x = pan.y = 0
+}
+
+/* Zooms the board around the pointer, so the detail being looked at stays under the
+   cursor instead of sliding off while it grows. That anchoring is also what stands in for
+   dragging: zoom out, move the pointer, zoom back in somewhere else.
+   Takes the WheelEvent; returns nothing. */
+function onWheel(e){
+  // a wheel notch is ~100 in pixels, ~3 in lines, 1 in pages — Firefox reports lines on
+  // most mice, and taking deltaY raw there moves the zoom by a third of a percent
+  const step = e.deltaMode === 1 ? e.deltaY * 16
+             : e.deltaMode === 2 ? e.deltaY * 400
+             : e.deltaY
+  const next = Math.min(Math.max(zoom.value * Math.exp(-step / 400), 1), ZOOM_MAX)
+  if(next === zoom.value) return
+  // all the way back out is the reset: the offset has nowhere to be when nothing is
+  // cropped, and leaving it would park a fitted drawing off centre
+  if(next === 1) return resetZoom()
+
+  const r = e.currentTarget.getBoundingClientRect()
+  const cx = e.clientX - r.left - r.width / 2
+  const cy = e.clientY - r.top - r.height / 2
+  const k = next / zoom.value
+  pan.x = cx - (cx - pan.x) * k
+  pan.y = cy - (cy - pan.y) * k
+  zoom.value = next
+}
+
+/* The board's transform, and the scale the stylesheet divides the selection outline by —
+   a hairline is only a hairline until the whole drawing is scaled sixteen times with it. */
+const art = computed(() => ({
+  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom.value})`,
+  '--zoom': zoom.value
+}))
 
 /* Reads the picked file, keeps a preview URL and its natural size, and kicks off a trace.
    Takes the File chosen through the drop zone or file input; returns nothing. */
@@ -146,6 +240,26 @@ async function run(){
   busy.value = false
 }
 
+/* Traces the current image the slow way — seconds where the preview takes tenths, so it
+   is never set off by an option change, only by the button, and never while something
+   else is running.
+   Takes nothing and returns a Promise that settles when the pass lands or fails. */
+async function runRefine(){
+  if(busy.value || !source.value) return
+  busy.value = true
+  phase.value = 'reading'
+  try{
+    result.value = await refine(source.value.file, opts, p => (phase.value = p))
+    error.value = ''
+  }catch(err){
+    error.value = errText(err)
+  }
+  phase.value = ''
+  busy.value = false
+  // options moved while it ran, so the preview owes the panel a pass at the new settings
+  if(dirty) run()
+}
+
 watch([opts, source], run)
 
 /* The traced SVG's file name, without the source image's extension.
@@ -185,8 +299,7 @@ function stylize(){
       :source="source"
       :error="error"
       :colors="opts.colors"
-      :palette="palette"
-      :busy="busy"
+      :tone="opts.tone"
       @file="onFile"
       @clear="clear"
       @colors="opts.colors = $event"
@@ -197,14 +310,16 @@ function stylize(){
       <div
         class="stage"
         :class="{empty: !source, 'stage--edit': board && view === 'vector'}"
+        :style="frame"
         :data-hint="t.vec.emptyHint"
         @click="view === 'vector' && onStagePick($event)"
+        @wheel.prevent="source && onWheel($event)"
       >
-        <img v-if="source && view === 'original'" class="stage-art" :src="source.url" alt="">
-        <div v-else-if="board" class="stage-art" v-html="board"></div>
-        <div v-else-if="source" class="stage-wait">{{ t.vec.tracing }}</div>
+        <img v-if="source && view === 'original'" class="stage-art" :src="source.url" :style="art" alt="">
+        <div v-else-if="board" class="stage-art" :style="art" v-html="board"></div>
+        <div v-else-if="source" class="stage-wait">{{ waiting }}</div>
         <div v-else class="stage-mark" v-html="mark" aria-hidden="true"></div>
-        <div v-if="busy && result" class="stage-badge">{{ t.vec.tracing }}</div>
+        <div v-if="busy && result" class="stage-badge">{{ waiting }}</div>
       </div>
       <div class="stage-meta">
         <span>{{ source?.name ?? '—' }}</span>
@@ -227,6 +342,27 @@ function stylize(){
         <button type="button" class="chip" @click="resetEdits">{{ t.vec.resetEdits }}</button>
       </div>
       <p v-else-if="board && view === 'vector'" class="shape-hint">{{ t.vec.editHint }}</p>
+
+      <!-- the palette, under the drawing it belongs to. Swapping an entry repaints every
+           shape carrying it, which on a trace is hundreds of them. It stays one step
+           behind while a new trace runs — dimmed rather than hidden, which would make the
+           column jump on every step of the colour slider. -->
+      <template v-if="source">
+        <div v-if="palette.length" class="shape-bar palette" :class="{stale: busy}">
+          <label
+            v-for="c in palette"
+            :key="c"
+            class="shape-swatch"
+            :title="t.vec.paletteColor"
+          >
+            <span :style="{background: swaps[c] ?? c}"></span>
+            <input type="color" :value="swaps[c] ?? c" @input="swapColor(c, $event.target.value)">
+          </label>
+          <button v-if="swapCount" type="button" class="chip" @click="resetColors">{{ t.vec.resetColors }}</button>
+        </div>
+        <p v-else class="shape-hint">{{ t.vec.reading }}</p>
+        <p v-if="palette.length" class="shape-hint">{{ t.vec.paletteHint }}</p>
+      </template>
 
       <div class="presets presets--view">
         <button type="button" class="chip" :class="{on: view === 'vector'}" @click="view = 'vector'">{{ t.vec.viewVector }}</button>
@@ -252,9 +388,12 @@ function stylize(){
       :opts="opts"
       :can-export="!!svg"
       :copied="copied"
+      :refining="!!phase"
+      :can-refine="!!source && !busy"
       @download="download"
       @copy="copy"
       @stylize="stylize"
+      @refine="runRefine"
     />
   </div>
 </template>

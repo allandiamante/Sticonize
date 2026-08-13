@@ -6,13 +6,43 @@ export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
    of path data, and 2048 costs four times that. The list stops where the wait does. */
 export const WORK_SIZES = [384, 512, 768, 1024, 1280, 1536]
 
+/* The refine pass traces at twice the working size and rebuilds the outlines from there,
+   so the pixel staircase it is erasing is half the size of the anchors it keeps. Doubling
+   costs roughly four times the trace.
+   The ceiling is memory, not patience: measured on a busy photograph, 2048 traces in
+   about five seconds but peaks around 600 MB between the pixels, the engine's own tables
+   and seven megabytes of path data. Raising it squares that, and a worker that runs out
+   dies without an error anyone can show. */
+export const REFINE_SCALE = 2
+export const REFINE_MAX_SIDE = 2048
+
+/* The steps a refine pass reports, in order. The panel names them; nothing here reads
+   them except the label lookup, but a phase the dictionary has no word for renders blank,
+   so the list is the contract between the worker and the panel. */
+export const PHASES = ['reading', 'quantize', 'trace', 'smooth', 'anchors', 'curves', 'assemble']
+
 /* The palette size the image is reduced to before tracing. Two is the smallest that
    still carries a shape; past ~32 the palette stops being something anyone picks. */
 export const MIN_COLORS = 2
 export const MAX_COLORS = 32
 
-export const MODES = ['spline', 'polygon', 'pixel']
+/* Curve modes, in the order the panel offers them — straight segments first, because
+   that is what the default trace uses and what most artwork wants. */
+export const MODES = ['polygon', 'pixel', 'spline']
 export const STACKING = ['stacked', 'cutout']
+
+/* What the image is reduced to before it is traced. 'color' keeps the hues and quantizes
+   to the palette; 'gray' drops the hues and quantizes to that many steps of grey; 'mono'
+   goes all the way to black and white.
+   Black and white is the one that can throw the drawing away, so it is not left to the
+   engine: the pixels are cut here, at a level read off the picture, and the engine is
+   handed something already black on white. */
+export const TONES = ['color', 'gray', 'mono']
+
+/* How far the black-and-white cut may be nudged off the level the picture suggests, in
+   luma steps. Wide enough to pull a whole shadow to either side, short of the ends where
+   everything collapses to one tone. */
+export const MAX_THRESHOLD = 64
 
 /* Measured, not read off vtracer's CLI docs, because this build does not match them:
    raising colorPrecision *merges* regions here rather than separating them. At 7 every
@@ -27,12 +57,12 @@ export const MAX_COLOR_PRECISION = 5
    colorPrecision sits at the low end everywhere except photo: low is what keeps regions
    apart here, and only a busy photograph benefits from trading some away for file size. */
 export const PRESETS = {
-  auto:    {binary:false, mode:'spline',  hierarchical:'stacked', filterSpeckle:4,  colorPrecision:2, layerDifference:16, cornerThreshold:60, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
-  clipart: {binary:false, mode:'spline',  hierarchical:'stacked', filterSpeckle:8,  colorPrecision:2, layerDifference:24, cornerThreshold:60, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
-  photo:   {binary:false, mode:'spline',  hierarchical:'stacked', filterSpeckle:2,  colorPrecision:4, layerDifference:8,  cornerThreshold:80, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
-  drawing: {binary:false, mode:'spline',  hierarchical:'stacked', filterSpeckle:4,  colorPrecision:1, layerDifference:32, cornerThreshold:45, lengthThreshold:4,   spliceThreshold:30, maxIterations:10, pathPrecision:2},
-  logo:    {binary:false, mode:'polygon', hierarchical:'cutout',  filterSpeckle:16, colorPrecision:1, layerDifference:32, cornerThreshold:30, lengthThreshold:6,   spliceThreshold:20, maxIterations:8,  pathPrecision:3},
-  mono:    {binary:true,  mode:'spline',  hierarchical:'stacked', filterSpeckle:8,  colorPrecision:1, layerDifference:64, cornerThreshold:45, lengthThreshold:4,   spliceThreshold:30, maxIterations:10, pathPrecision:2}
+  auto:    {tone:'color', mode:'polygon', hierarchical:'stacked', filterSpeckle:4,  colorPrecision:2, layerDifference:16, cornerThreshold:60, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
+  clipart: {tone:'color', mode:'spline',  hierarchical:'stacked', filterSpeckle:8,  colorPrecision:2, layerDifference:24, cornerThreshold:60, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
+  photo:   {tone:'color', mode:'spline',  hierarchical:'stacked', filterSpeckle:2,  colorPrecision:4, layerDifference:8,  cornerThreshold:80, lengthThreshold:4,   spliceThreshold:45, maxIterations:10, pathPrecision:2},
+  drawing: {tone:'color', mode:'spline',  hierarchical:'stacked', filterSpeckle:4,  colorPrecision:1, layerDifference:32, cornerThreshold:45, lengthThreshold:4,   spliceThreshold:30, maxIterations:10, pathPrecision:2},
+  logo:    {tone:'color', mode:'polygon', hierarchical:'cutout',  filterSpeckle:16, colorPrecision:1, layerDifference:32, cornerThreshold:30, lengthThreshold:6,   spliceThreshold:20, maxIterations:8,  pathPrecision:3},
+  mono:    {tone:'mono',  mode:'spline',  hierarchical:'stacked', filterSpeckle:8,  colorPrecision:1, layerDifference:64, cornerThreshold:45, lengthThreshold:4,   spliceThreshold:30, maxIterations:10, pathPrecision:2}
 }
 
 /* Clamps a number into a range.
@@ -55,8 +85,10 @@ export function validateFile(file){
    returns a plain config object for to_svg. */
 export function traceOptions(o){
   return {
-    binary: !!o.binary,
-    mode: MODES.includes(o.mode) ? o.mode : 'spline',
+    // the pixels reach the engine already black on white, so its own cut has nothing left
+    // to throw away — this only asks for the single-shape output that goes with them
+    binary: o.tone === 'mono',
+    mode: MODES.includes(o.mode) ? o.mode : 'polygon',
     hierarchical: STACKING.includes(o.hierarchical) ? o.hierarchical : 'stacked',
     filterSpeckle: clamp(Math.round(o.filterSpeckle), 0, 128),
     colorPrecision: clamp(Math.round(o.colorPrecision), 1, MAX_COLOR_PRECISION),
@@ -92,6 +124,22 @@ const paint = (shape, fill) => /\sfill="/.test(shape)
    Takes the traced SVG; returns an array of CSS colour strings. */
 export function shapeFills(svg){
   return [...svg.matchAll(SHAPE)].map(m => (m[0].match(/\sfill="([^"]*)"/) || [, '#000000'])[1])
+}
+
+/* Repaints every shape drawn in one of the swapped colours, wherever it appears.
+   A trace can carry hundreds of shapes in one palette entry, so this is the difference
+   between recolouring a drawing and clicking through it. Shapes are matched by the colour
+   they carry rather than by index, which is also what lets it run before the per-shape
+   edits and leave those on top: a shape someone painted by hand stays as they painted it.
+   Takes the traced SVG and a map of palette colour to replacement, both lower-case;
+   returns the rewritten markup. */
+export function swapFills(svg, swaps){
+  if(!swaps || !Object.keys(swaps).length) return svg
+  return svg.replace(SHAPE, shape => {
+    // a shape with no fill of its own is black, the same way shapeFills reads it
+    const fill = (shape.match(/\sfill="([^"]*)"/) || [, '#000000'])[1].toLowerCase()
+    return swaps[fill] ? paint(shape, swaps[fill]) : shape
+  })
 }
 
 /* Applies the per-shape edits to traced markup. Shapes are numbered by their position
@@ -146,10 +194,30 @@ function tracer(){
   worker.onmessage = ({data}) => {
     const job = pending.get(data.id)
     if(!job) return
+    // a phase is a progress report, not an answer: the job stays open
+    if(data.phase){ job.onPhase?.(data.phase); return }
     pending.delete(data.id)
     data.error ? job.reject(new Error(data.error)) : job.resolve(data)
   }
   return worker
+}
+
+/* Hands one job to the worker and keeps its callbacks until it answers.
+   Takes the message minus its id, the working resolution, the panel options and an
+   optional phase callback; returns a Promise of the worker's reply. */
+function send(file, maxSide, opts, extra, onPhase){
+  const id = ++nextId
+  return new Promise((resolve, reject) => {
+    pending.set(id, {resolve, reject, onPhase})
+    tracer().postMessage({
+      id, file, maxSide,
+      colors: clamp(Math.round(opts.colors), MIN_COLORS, MAX_COLORS),
+      tone: TONES.includes(opts.tone) ? opts.tone : 'color',
+      threshold: clamp(Math.round(opts.threshold || 0), -MAX_THRESHOLD, MAX_THRESHOLD),
+      options: traceOptions(opts),
+      ...extra
+    })
+  })
 }
 
 /* Traces one raster image into SVG off the main thread, so the panel stays responsive
@@ -158,14 +226,15 @@ function tracer(){
    returns a Promise of {svg, palette, width, height, ms} — the traced markup, the
    palette it was reduced to, the working resolution, and the trace time in ms. */
 export function trace(file, opts){
-  const id = ++nextId
-  return new Promise((resolve, reject) => {
-    pending.set(id, {resolve, reject})
-    tracer().postMessage({
-      id, file,
-      maxSide: opts.maxSide,
-      colors: clamp(Math.round(opts.colors), MIN_COLORS, MAX_COLORS),
-      options: traceOptions(opts)
-    })
-  })
+  return send(file, opts.maxSide, opts, null, null)
+}
+
+/* Traces the same image the slow way: a re-centred palette, twice the resolution, and
+   the outlines rebuilt afterwards. Minutes rather than seconds, so it is a button rather
+   than something an option change sets off.
+   Takes the source File, the panel options object and a callback called with each phase
+   name as it starts; returns the same shape trace does, plus refined: true. */
+export function refine(file, opts, onPhase){
+  const side = Math.min(opts.maxSide * REFINE_SCALE, REFINE_MAX_SIDE)
+  return send(file, side, opts, {refine: true}, onPhase)
 }

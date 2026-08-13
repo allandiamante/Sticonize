@@ -4,7 +4,8 @@ import { ACCEPTED_TYPES, MAX_BYTES, MIN_COLORS, MAX_COLORS, formatBytes } from '
 import { t } from '../i18n.js'
 import InfoTip from './InfoTip.vue'
 
-defineProps({ source: Object, error: String, colors: Number, palette: Array, busy: Boolean })
+// the palette itself lives under the drawing, where a swatch is next to what it paints
+defineProps({ source: Object, error: String, colors: Number, tone: String })
 const emit = defineEmits(['file', 'clear', 'colors'])
 
 const hot = ref(false)
@@ -61,6 +62,8 @@ function onDrop(e){
           <output>{{ colors }}</output>
           <InfoTip :tip="t.vec.tips.colorCount" />
         </div>
+        <!-- black and white has two colours by definition, so the count has nothing left
+             to decide there -->
         <input
           id="colorCount"
           type="range"
@@ -68,17 +71,11 @@ function onDrop(e){
           :max="MAX_COLORS"
           step="1"
           :value="colors"
+          :disabled="tone === 'mono'"
           @input="emit('colors', Number($event.target.value))"
         >
       </div>
 
-      <!-- the palette is what the last trace actually landed on, so while a new one runs
-           it is one step behind — dimmed rather than hidden, which would make the whole
-           panel jump on every step of the slider -->
-      <div v-if="palette.length" class="palette" :class="{stale: busy}">
-        <span v-for="(c, i) in palette" :key="i" class="palette-chip" :style="{background: c}" :title="c"></span>
-      </div>
-      <p v-else class="search-msg">{{ t.vec.reading }}</p>
     </template>
 
     <p class="note">{{ t.vec.colorNote }}</p>

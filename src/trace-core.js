@@ -1,31 +1,191 @@
-/* Scales a source resolution down so its longest side fits `max`, never scaling up.
-   Takes the source width, height and the maximum allowed side in pixels;
-   returns {width, height} as positive integers. */
+/* The most a source may be enlarged to reach the working size.
+   Enlarging adds no detail, but it does spread the antialiased rim of every edge over
+   more pixels, and that is what the tracer reads: at native size a small drawing gives it
+   a one-pixel staircase to follow and every rim shade becomes a shape of its own. Past
+   about eight times there is nothing left but blur, and the trace is paying for it. */
+const MAX_UPSCALE = 8
+
+/* Scales a source resolution so its longest side reaches `max`.
+   Takes the source width, height and the working size in pixels;
+   returns {width, height, scale} — the size to trace at, and the factor it took. */
 export function fitSize(w, h, max){
-  const k = Math.min(max / Math.max(w, h), 1)
-  return {width: Math.max(Math.round(w * k), 1), height: Math.max(Math.round(h * k), 1)}
-}
-
-/* Averages a bucket of colours.
-   Takes an array of [r,g,b]; returns the rounded mean as [r,g,b]. */
-function mean(box){
-  const sum = box.reduce((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0])
-  return sum.map(v => Math.round(v / box.length))
-}
-
-/* Measures how far a bucket spreads on its widest channel.
-   Takes an array of [r,g,b]; returns {channel, range}. */
-function spread(box){
-  let channel = 0, range = -1
-  for(let c = 0; c < 3; c++){
-    let lo = 255, hi = 0
-    for(const p of box){
-      if(p[c] < lo) lo = p[c]
-      if(p[c] > hi) hi = p[c]
-    }
-    if(hi - lo > range){ range = hi - lo; channel = c }
+  const k = Math.min(max / Math.max(w, h), MAX_UPSCALE)
+  return {
+    width: Math.max(Math.round(w * k), 1),
+    height: Math.max(Math.round(h * k), 1),
+    scale: k
   }
-  return {channel, range}
+}
+
+/* Perceived brightness, Rec.601 — the weighting that keeps a yellow reading lighter than
+   a blue of the same numbers, which a plain average does not.
+   Takes the three channels; returns the luma. */
+const luma = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b
+
+/* Finds the brightness that best splits an image in two (Otsu's method): the cut where
+   the two sides are each as tight as they can be, which is the same as the cut where
+   they sit furthest apart.
+   The engine's own black-and-white mode cuts at a fixed level instead, which is why a
+   mid-tone subject on white vanishes from it whole — nothing in the picture is dark
+   enough to be called foreground. Reading the cut off the picture is what keeps the
+   drawing: whatever the darker half of this image is, it stays.
+   Takes the luma histogram and the number of pixels in it; returns the cut, 0–255. */
+function otsu(hist, total){
+  let sum = 0
+  for(let i = 0; i < 256; i++) sum += i * hist[i]
+
+  // 255 is not a cut the loop below can reach — it breaks as soon as one side is empty —
+  // so it doubles as "there is nothing here to split". An image of a single tone, which
+  // is what a silhouette on transparency is, comes out entirely on the dark side of it:
+  // one shape, which is the drawing, rather than a blank page
+  let below = 0, weight = 0, best = -1, cut = 255
+  for(let t = 0; t < 256; t++){
+    weight += hist[t]
+    if(!weight) continue
+    const rest = total - weight
+    if(!rest) break
+    below += t * hist[t]
+    // the between-class variance, dropped of the constant divisor it shares everywhere
+    const spread = weight * rest * (below / weight - (sum - below) / rest) ** 2
+    if(spread > best){ best = spread; cut = t }
+  }
+  return cut
+}
+
+/* Takes the colour out of an image, in place, before anything is traced.
+   'gray' leaves the drawing whole and only drops the hues, so the palette below becomes
+   that many steps of grey. 'mono' goes on to cut it into black and white at the split the
+   picture itself suggests, nudged by `bias` — the one number a picture cannot supply,
+   because whether a shadow belongs to the subject or the background is a decision.
+   Takes the ImageData (mutated), the tone and the bias in luma steps; returns nothing. */
+export function tonemap(image, tone, bias = 0){
+  if(tone !== 'gray' && tone !== 'mono') return
+  const {data} = image
+  const hist = new Uint32Array(256)
+  let total = 0
+
+  for(let p = 0; p < data.length; p += 4){
+    if(data[p + 3] < 128) continue
+    const v = Math.round(luma(data[p], data[p + 1], data[p + 2]))
+    data[p] = data[p + 1] = data[p + 2] = v
+    hist[v]++
+    total++
+  }
+  if(tone === 'gray' || !total) return
+
+  const cut = Math.min(Math.max(otsu(hist, total) + bias, 0), 255)
+  for(let p = 0; p < data.length; p += 4){
+    if(data[p + 3] < 128) continue
+    data[p] = data[p + 1] = data[p + 2] = data[p] > cut ? 255 : 0
+  }
+}
+
+/* Squared distance between a bucket and a palette entry. Squared because nothing here
+   compares it to anything but another distance, and the root costs more than it says.
+   Takes the bucket and the [r,g,b] entry; returns the distance. */
+const gap = (c, e) => (c.r - e[0]) ** 2 + (c.g - e[1]) ** 2 + (c.b - e[2]) ** 2
+
+/* Groups a sample of the image's pixels by colour.
+   Buckets at 5 bits a channel: fine enough that two colours anyone can tell apart land in
+   different buckets, coarse enough that a photograph collapses to a few thousand entries
+   the picking below can afford to scan over and over.
+   Takes the ImageData; returns [{r, g, b, n}] — each bucket's mean colour and how much of
+   the sample it holds. */
+function buckets(image){
+  const {data} = image
+  const pixels = data.length / 4
+  // past ~20k sampled pixels the palette stops moving, and every pixel is repainted anyway
+  const step = Math.max(1, Math.round(pixels / 20000))
+  const index = new Map()
+  const list = []
+
+  for(let i = 0; i < pixels; i += step){
+    const p = i * 4
+    if(data[p + 3] < 128) continue
+    const key = (data[p] >> 3) << 10 | (data[p + 1] >> 3) << 5 | data[p + 2] >> 3
+    let c = index.get(key)
+    if(!c){ c = {r: 0, g: 0, b: 0, n: 0}; index.set(key, c); list.push(c) }
+    c.r += data[p]; c.g += data[p + 1]; c.b += data[p + 2]; c.n++
+  }
+  for(const c of list){ c.r /= c.n; c.g /= c.n; c.b /= c.n }
+  return list
+}
+
+/* Picks the starting palette by how far apart the colours are, not by how much of the
+   image each one covers.
+   Splitting the colour cube by population — median cut, which this used to do — spends
+   its entries where the pixels are. A logo that is four fifths background, border and
+   shadow gets those subdivided again and again, while the small red badge the whole
+   drawing is about never gets an entry and comes out brown. Taking the bucket furthest
+   from everything already picked finds that badge within the first few entries.
+   Distance alone would pick the single furthest colour in the image, which in a
+   photograph is always a lone compression artefact, so the score counts how much of the
+   sample the bucket holds — but only up to a hundredth of it. Above that share a colour
+   is plainly part of the drawing and competes on distance alone; below it, it is weighed
+   down in proportion to how little of it there is. Counting population all the way up is
+   what buried the badge in the first place: no detail outweighs a background.
+   Takes the buckets and how many entries to pick; returns them as [r,g,b]. */
+function seed(list, colors){
+  // the first entry is the image's own average, so the second pick is what sits furthest
+  // from the middle of this image rather than from an arbitrary corner of the cube
+  let total = 0, r = 0, g = 0, b = 0
+  for(const c of list){ total += c.n; r += c.r * c.n; g += c.g * c.n; b += c.b * c.n }
+  const palette = [[r / total, g / total, b / total]]
+  const enough = total / 100
+
+  const near = list.map(c => gap(c, palette[0]))
+  while(palette.length < colors){
+    let pick = -1, best = 0
+    for(let i = 0; i < list.length; i++){
+      const score = Math.min(list[i].n, enough) * near[i]
+      if(score > best){ best = score; pick = i }
+    }
+    if(pick < 0) break                        // every bucket already has an entry on it
+    const chosen = [list[pick].r, list[pick].g, list[pick].b]
+    palette.push(chosen)
+    for(let i = 0; i < list.length; i++){
+      const d = gap(list[i], chosen)
+      if(d < near[i]) near[i] = d
+    }
+  }
+  return palette.map(e => e.map(Math.round))
+}
+
+/* How many times the palette is re-centred. The move per pass shrinks fast, and a palette
+   that has stopped moving stops early anyway. */
+const SETTLE = 12
+
+/* Re-centres each entry on the colours that actually chose it (Lloyd's step).
+   Seeding puts the entries on real colours of the image but says nothing about where the
+   boundaries between them fall; this walks each entry to the middle of what it won. It is
+   the difference between a skin tone that reads as skin and one that reads as the average
+   of skin and the shirt behind it.
+   Takes the buckets and the palette (mutated); returns nothing. */
+function settle(list, palette){
+  for(let pass = 0; pass < SETTLE; pass++){
+    const sums = palette.map(() => [0, 0, 0, 0])
+    for(const c of list){
+      let best = Infinity, k = 0
+      for(let i = 0; i < palette.length; i++){
+        const d = gap(c, palette[i])
+        if(d < best){ best = d; k = i }
+      }
+      const s = sums[k]
+      s[0] += c.r * c.n; s[1] += c.g * c.n; s[2] += c.b * c.n; s[3] += c.n
+    }
+    let moved = 0
+    for(let i = 0; i < palette.length; i++){
+      // an entry nothing chose keeps its place; the repaint below is what drops it, once
+      // it is certain no pixel wanted it either
+      if(!sums[i][3]) continue
+      for(let ch = 0; ch < 3; ch++){
+        const next = Math.round(sums[i][ch] / sums[i][3])
+        moved += Math.abs(next - palette[i][ch])
+        palette[i][ch] = next
+      }
+    }
+    if(!moved) return
+  }
 }
 
 /* Reduces an image to a palette of at most `colors` entries and repaints every pixel
@@ -34,44 +194,22 @@ function spread(box){
    quantize — so the count has to be decided here, before it ever sees the pixels.
    Flattening also snaps antialiased rims to one side or the other, which is what stops
    a halo of in-between shades from becoming its own traced shape.
-   ponytail: median cut, which is deterministic and cheap; k-means would place the
-   entries better on photographs, at the cost of iterating.
    Takes the ImageData (mutated) and the wanted number of colours;
    returns the palette actually used, as '#rrggbb' strings, darkest first. */
 export function quantize(image, colors){
-  const {data} = image
-  const pixels = data.length / 4
-  // the palette is built from a sample: past ~20k pixels the buckets stop moving, and
-  // every pixel still gets repainted below
-  const step = Math.max(1, Math.round(pixels / 20000))
-  const sample = []
-  for(let i = 0; i < pixels; i += step){
-    const p = i * 4
-    if(data[p + 3] >= 128) sample.push([data[p], data[p + 1], data[p + 2]])
-  }
-  if(!sample.length) return []
+  const list = buckets(image)
+  if(!list.length) return []
 
-  let boxes = [sample]
-  while(boxes.length < colors){
-    let pick = -1, widest = 0
-    for(let i = 0; i < boxes.length; i++){
-      const {range} = spread(boxes[i])
-      if(boxes[i].length > 1 && range > widest){ widest = range; pick = i }
-    }
-    if(pick < 0) break                       // every bucket is already a single colour
-    const box = boxes[pick]
-    const {channel} = spread(box)
-    const sorted = box.slice().sort((a, b) => a[channel] - b[channel])
-    const mid = sorted.length >> 1
-    boxes.splice(pick, 1, sorted.slice(0, mid), sorted.slice(mid))
-  }
-
-  const palette = boxes.map(mean)
-    .sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]))
+  const palette = seed(list, colors)
+  settle(list, palette)
+  // sorted last, so the swatches read dark to light
+  palette.sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]))
 
   // nearest-entry lookup cached per 15-bit colour bucket: a photograph asks the same
   // question millions of times, and the answer only changes every 8 levels
+  const {data} = image
   const cache = new Int16Array(32768).fill(-1)
+  const used = new Uint8Array(palette.length)
   for(let p = 0; p < data.length; p += 4){
     if(data[p + 3] < 128){ data[p + 3] = 0; continue }
     data[p + 3] = 255
@@ -87,10 +225,16 @@ export function quantize(image, colors){
       }
       cache[key] = k
     }
+    used[k] = 1
     data[p] = palette[k][0]; data[p + 1] = palette[k][1]; data[p + 2] = palette[k][2]
   }
 
-  return palette.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''))
+  // an entry no pixel picked is not a colour of this image, and no shape can be traced in
+  // it either. An image with fewer colours than were asked for comes back with the ones
+  // it has rather than with padding — black-and-white artwork asked for eight is two.
+  return palette
+    .filter((_, i) => used[i])
+    .map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''))
 }
 
 /* Forces the traced shapes back onto the chosen palette.

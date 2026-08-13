@@ -20,11 +20,19 @@ assert.throws(() => validateFile(file('image/png', MAX_BYTES + 1)), /^Error: too
 assert.throws(() => validateFile(file('image/png', 0)), /^Error: emptyFile$/)
 
 // oversized images shrink on their longest side and keep their aspect ratio
-assert.deepEqual(fitSize(4000, 2000, 1024), {width: 1024, height: 512})
-assert.deepEqual(fitSize(2000, 4000, 1024), {width: 512, height: 1024})
+assert.deepEqual(fitSize(4000, 2000, 1024), {width: 1024, height: 512, scale: 0.256})
+assert.deepEqual(fitSize(2000, 4000, 1024), {width: 512, height: 1024, scale: 0.256})
 
-// smaller images are never scaled up
-assert.deepEqual(fitSize(300, 200, 1024), {width: 300, height: 200})
+// small ones grow to meet the working size instead of being traced at their own. Left at
+// native size a 300 px drawing gives the tracer a one-pixel staircase, and every shade in
+// the antialiased rim of every edge becomes a shape of its own.
+assert.deepEqual(fitSize(300, 200, 1024), {width: 1024, height: 683, scale: 1024 / 300})
+
+// but only so far: enlarging invents no detail, and past the ceiling it is blur the trace
+// pays for by the pixel
+const tiny = fitSize(32, 32, 1536)
+assert.equal(tiny.scale, 8, 'the enlargement is capped')
+assert.deepEqual([tiny.width, tiny.height], [256, 256])
 
 // an extreme ratio still yields a drawable canvas
-assert.deepEqual(fitSize(8000, 3, 1024), {width: 1024, height: 1})
+assert.deepEqual(fitSize(8000, 3, 1024), {width: 1024, height: 1, scale: 0.128})

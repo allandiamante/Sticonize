@@ -1,7 +1,8 @@
-// Per-shape editing on a finished trace: recolour, delete, and the index bookkeeping
-// that keeps a selection pointing at the shape the user clicked.
+// Editing on a finished trace: recolouring one shape, recolouring a whole palette entry,
+// deleting, and the index bookkeeping that keeps a selection pointing at the shape the
+// user clicked.
 import assert from 'node:assert/strict'
-import { editPaths, shapeFills, countPaths, withBackground } from '../../src/vector.js'
+import { editPaths, swapFills, shapeFills, countPaths, countColors, withBackground } from '../../src/vector.js'
 
 const traced = '<svg viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">'
   + '<path d="M0 0" fill="#FFFFFF"/>'
@@ -57,3 +58,39 @@ assert.ok(!boardCut.includes('class="sel"'))
 const withBg = editPaths(withBackground(traced, '#ff0000'), {}, true, 0)
 assert.equal((withBg.match(/data-shape=/g) || []).length, 3)
 assert.ok(withBg.indexOf('<rect') < withBg.indexOf('data-shape="0"'))
+
+// ---- swapping a palette colour ---------------------------------------------------
+// no swaps is a pass-through, the same way no edits is
+assert.equal(swapFills(traced, {}), traced)
+assert.equal(swapFills(traced, null), traced)
+
+// a swap finds every shape carrying that colour, whatever the trace wrote it as: the
+// palette is lower-case and the engine emits upper
+const many = '<svg>'
+  + '<path d="M0 0" fill="#E4614A"/>'
+  + '<path d="M1 1" fill="#2E4A86"/>'
+  + '<path d="M2 2" fill="#E4614A"/>'
+  + '</svg>'
+const swapped = swapFills(many, {'#e4614a': '#00ff00'})
+assert.deepEqual(shapeFills(swapped), ['#00ff00', '#2E4A86', '#00ff00'])
+assert.equal(countPaths(swapped), 3, 'recolouring is not deleting')
+assert.ok(swapped.includes('d="M0 0"') && swapped.includes('d="M2 2"'), 'geometry untouched')
+
+// several entries at once, and a colour with no shape on it changes nothing
+assert.deepEqual(
+  shapeFills(swapFills(many, {'#e4614a': '#111111', '#2e4a86': '#222222', '#abcdef': '#333333'})),
+  ['#111111', '#222222', '#111111'])
+
+// a binary trace emits shapes with no fill at all. They read as black, so black is the
+// entry that has to reach them — otherwise the palette strip is dead in that mode.
+const bareTrace = '<svg><path d="M0 0"/><path d="M1 1" fill="#ffffff"/></svg>'
+assert.deepEqual(shapeFills(swapFills(bareTrace, {'#000000': '#0000ff'})), ['#0000ff', '#ffffff'])
+
+// the swap runs first and the per-shape edits land on top, so recolouring a whole entry
+// never undoes a shape someone painted by hand
+const layered = editPaths(swapFills(many, {'#e4614a': '#00ff00'}), {2: {fill: '#ff00ff'}})
+assert.deepEqual(shapeFills(layered), ['#00ff00', '#2E4A86', '#ff00ff'])
+assert.equal(countColors(layered), 3)
+
+// and the indices still count positions in the untouched trace: swapping moves no shape
+assert.equal(countPaths(editPaths(swapFills(many, {'#e4614a': '#00ff00'}), {0: {removed: true}})), 2)

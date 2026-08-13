@@ -47,17 +47,20 @@ const cut = trace(disc(S, true), PRESETS.auto)
 assert.equal(countPaths(cut), 1)
 assert.equal(countColors(cut), 1)
 
-// every preset produces usable markup rather than throwing. Binary presets threshold on
-// luminance, so they are fed the black-on-white art they are meant for.
+// every preset produces usable markup rather than throwing. The black-and-white preset
+// thresholds on luminance, so it is fed the black-on-white art it is meant for — which
+// is exactly what tonemap hands it in the worker.
 for(const [name, preset] of Object.entries(PRESETS)){
-  const art = disc(S, false, preset.binary ? [20, 20, 20] : [228, 97, 74])
+  const art = disc(S, false, preset.tone === 'mono' ? [20, 20, 20] : [228, 97, 74])
   const out = trace(art, preset)
   assert.ok(out.startsWith('<svg '), `${name} produced markup`)
   assert.ok(countPaths(out) >= 1, `${name} produced at least one path`)
 }
 
-// binary mode drops a mid-tone subject entirely: valid markup, nothing in it. The worker
-// turns this into an error, so it must stay detectable exactly this way.
+// the engine's own black-and-white cut drops a mid-tone subject entirely: valid markup,
+// nothing in it. This is the whole reason the pixels are cut before they get here, so it
+// has to stay pinned — if a future build stops dropping it, tonemap's mono pass is no
+// longer load-bearing and the engine could be trusted with the cut again.
 const dropped = trace(disc(S, false), PRESETS.mono)
 assert.ok(dropped.startsWith('<svg '))
 assert.equal(countPaths(dropped), 0)

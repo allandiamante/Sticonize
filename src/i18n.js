@@ -99,7 +99,7 @@ const dict = {
       viewVector: 'Vetor',
       viewOriginal: 'Original',
       imageType: 'Tipo de imagem',
-      presets: {auto: 'Automático', clipart: 'Clipart', photo: 'Foto', drawing: 'Arte de linha', logo: 'Logo', mono: 'Duas cores'},
+      presets: {auto: 'Automático', clipart: 'Clipart', photo: 'Foto', drawing: 'Arte de linha', logo: 'Logo', mono: 'Preto e branco'},
       colorCount: 'Cores',
       reading: 'Lendo as cores da imagem…',
       colorNote: 'A imagem é reduzida a essas cores antes de virar vetor. Menos cores dão formas mais limpas e arquivo menor; mais cores guardam o sombreado.',
@@ -117,7 +117,9 @@ const dict = {
       maxIterations: 'Passadas de suavização',
       pathPrecision: 'Precisão das coordenadas',
       palette: 'Cores',
-      binary: 'Vetorizar em preto e branco',
+      tone: 'Tom',
+      tones: {color: 'Cores', gray: 'Tons de cinza', mono: 'Preto e branco'},
+      threshold: 'Ajuste do corte',
       colorPrecision: 'Fusão de cores',
       layerDifference: 'Diferença entre camadas',
       filterSpeckle: 'Filtrar respingos',
@@ -128,7 +130,10 @@ const dict = {
       download: 'Baixar SVG',
       copy: 'Copiar código SVG',
       copied: 'Copiado',
-      editHint: 'Clique numa forma para trocar a cor ou apagar',
+      editHint: 'Clique numa forma para trocar a cor ou apagar · role o mouse para dar zoom',
+      paletteColor: 'Trocar essa cor no desenho inteiro',
+      paletteHint: 'Clique numa cor da paleta para trocá-la em todas as formas que a usam',
+      resetColors: 'Restaurar cores',
       shapeColor: 'Cor da forma',
       deleteShape: 'Apagar forma',
       deselect: 'Desmarcar',
@@ -137,20 +142,36 @@ const dict = {
       stylize: 'Estilizar este ícone',
       suffix: '-vetor',
 
+      refineTitle: 'Refino',
+      refineRun: 'Refinar',
+      refineBusy: 'Refinando…',
+      refineNote: 'Uma passada lenta: a paleta é recentrada nos pixels que escolheram cada cor, a imagem é traçada no dobro do tamanho de trabalho, e cada contorno é refeito — relaxado, reduzido às âncoras que importam e reajustado em béziers. Vale em foto e digitalização, onde o motor acompanha cada respingo do raster; arte limpa já sai perto do melhor que ela dá. Mexer em qualquer ajuste depois refaz a prévia rápida e descarta o refino.',
+      refined: 'refinado',
+      phases: {
+        reading: 'Lendo a imagem…',
+        quantize: 'Assentando as cores…',
+        trace: 'Traçando…',
+        smooth: 'Suavizando os contornos…',
+        anchors: 'Ajustando os pontos de ancoragem…',
+        curves: 'Ajustando as curvas de Bézier…',
+        assemble: 'Montando a imagem…'
+      },
+
       tips: {
         colorCount: 'Quantas cores o vetor terá. A imagem é reduzida a essa paleta antes do traçado, e as formas são forçadas de volta nela depois — o motor não tem contagem de cores própria e reinventa tons por região se ninguém impuser a paleta.',
-        workingSize: 'A imagem é vetorizada nesse tamanho. É a alavanca de detalhe mais forte e a que mais custa: o traço roda numa passada só, sem como interromper, então uma imagem carregada a 1536 px já leva segundos e gera megabytes de caminho.',
-        mode: 'Como os contornos são desenhados. Curvas suaves ajustam béziers, segmentos retos mantêm polígonos, e borda de pixel segue a escadinha do raster exatamente.',
+        workingSize: 'A imagem é vetorizada nesse tamanho — e uma imagem menor é ampliada até ele, em vez de traçada no tamanho dela. No tamanho nativo um desenho pequeno entrega ao motor uma escadinha de um pixel, e cada tom da borda suavizada vira uma forma. É a alavanca de detalhe mais forte e a que mais custa: o traço roda numa passada só, sem como interromper, então 1536 px já leva segundos e gera megabytes de caminho.',
+        mode: 'Como os contornos são desenhados. Segmentos retos mantêm polígonos, borda de pixel segue a escadinha do raster exatamente, e curvas suaves ajustam béziers.',
         stacking: 'Empilhado pinta cada região por cima das de baixo, e nunca sobra fresta. Recortado abre buracos em vez disso, dando arquivo menor e transparência de verdade entre as formas.',
         cornerThreshold: 'O quanto uma virada precisa ser fechada, em graus, para continuar canto em vez de virar curva. Menor mantém mais cantos.',
         lengthThreshold: 'A subdivisão continua até todo segmento ficar menor que isso. Menor acompanha melhor o contorno e custa mais pontos.',
         spliceThreshold: 'O quanto uma curva pode girar, em graus, antes de ser partida em duas. Menor gera mais pedaços de curva, e mais simples.',
         maxIterations: 'Quantas passadas de suavização o ajuste de curva faz. Mais assenta a forma; o ganho satura rápido.',
         pathPrecision: 'Casas decimais guardadas nas coordenadas. Menos casas dão arquivo menor e formas um pouco mais moles.',
-        binary: 'Vetoriza uma forma preta só, em vez de regiões coloridas. O resultado mais limpo para carimbo, assinatura e arte de linha.',
+        tone: 'O que sobra da imagem antes do traçado. Cores mantém os matizes e reduz à paleta; Tons de cinza tira só os matizes, e a contagem de cores vira essa quantidade de cinzas — é o que guarda o desenho inteiro sem cor. Preto e branco corta em dois no nível que a própria imagem sugere, e não no nível fixo do motor, que some com um assunto de meio-tom por inteiro.',
+        threshold: 'Empurra o corte do preto e branco para além do nível lido da imagem. Para a esquerda joga mais coisa para o preto, para a direita para o branco — é como se diz de que lado de uma sombra está o assunto.',
         colorPrecision: 'Quanto o motor funde regiões vizinhas numa só. Baixo mantém cada área separada — é o lado fiel. Alto simplifica e encolhe o arquivo, e acima de 5 o motor colapsa a imagem inteira num único caminho, por isso o controle para ali.',
         layerDifference: 'O quanto dois tons precisam estar distantes para virarem camadas separadas. Maior funde degradês em menos regiões, mais chapadas.',
-        filterSpeckle: 'Descarta manchas menores que esse tanto de pixels — o jeito mais rápido de limpar ruído de scanner e artefato de JPEG.',
+        filterSpeckle: 'Descarta manchas menores que esse tanto de pixels da imagem original — o jeito mais rápido de limpar ruído de scanner e artefato de JPEG. Se a imagem for ampliada para o tamanho de trabalho, o valor é ampliado junto, senão uma mancha de quatro pixels passaria batido cobrindo duzentos.',
         background: 'Pintado atrás das formas vetorizadas. Transparente deixa o SVG vazado.'
       }
     },
@@ -166,7 +187,7 @@ const dict = {
       decodeFail: 'Não deu para decodificar essa imagem.',
       clipboard: 'A área de transferência não está disponível aqui — use Baixar SVG.',
       traceFail: 'Não deu para vetorizar essa imagem.',
-      emptyTrace: 'Esses ajustes descartaram a imagem inteira. Em preto e branco os tons médios somem — baixe o filtro de respingos ou desligue o preto e branco.'
+      emptyTrace: 'Esses ajustes descartaram a imagem inteira. Baixe o filtro de respingos, ou, em preto e branco, mexa no ajuste do corte — ele pode ter empurrado a imagem toda para um lado só.'
     }
   },
 
@@ -268,7 +289,7 @@ const dict = {
       viewVector: 'Vector',
       viewOriginal: 'Original',
       imageType: 'Image type',
-      presets: {auto: 'Auto', clipart: 'Clipart', photo: 'Photo', drawing: 'Line art', logo: 'Logo', mono: 'Two colours'},
+      presets: {auto: 'Auto', clipart: 'Clipart', photo: 'Photo', drawing: 'Line art', logo: 'Logo', mono: 'Black and white'},
       colorCount: 'Colors',
       reading: 'Reading the image colors…',
       colorNote: 'The image is reduced to these colors before it is traced. Fewer colors give cleaner shapes and a smaller file; more colors keep the shading.',
@@ -286,7 +307,9 @@ const dict = {
       maxIterations: 'Smoothing passes',
       pathPrecision: 'Coordinate precision',
       palette: 'Colors',
-      binary: 'Trace in black and white',
+      tone: 'Tone',
+      tones: {color: 'Colors', gray: 'Shades of grey', mono: 'Black and white'},
+      threshold: 'Cut adjustment',
       colorPrecision: 'Color merging',
       layerDifference: 'Layer difference',
       filterSpeckle: 'Filter speckle',
@@ -297,7 +320,10 @@ const dict = {
       download: 'Download SVG',
       copy: 'Copy SVG code',
       copied: 'Copied',
-      editHint: 'Click a shape to recolor or delete it',
+      editHint: 'Click a shape to recolor or delete it · scroll to zoom in',
+      paletteColor: 'Swap this color across the whole drawing',
+      paletteHint: 'Click a palette color to change it in every shape that uses it',
+      resetColors: 'Restore colors',
       shapeColor: 'Shape color',
       deleteShape: 'Delete shape',
       deselect: 'Deselect',
@@ -306,20 +332,36 @@ const dict = {
       stylize: 'Stylize this icon',
       suffix: '-vector',
 
+      refineTitle: 'Refine',
+      refineRun: 'Refine',
+      refineBusy: 'Refining…',
+      refineNote: 'One slow pass: the palette is re-centred on the pixels that chose each color, the image is traced at twice the working size, and every outline is rebuilt — relaxed, thinned down to the anchors that matter, and refitted as Béziers. Worth it on photos and scans, where the engine follows the raster noise bump for bump; clean artwork already comes out close to its best. Touching any setting afterwards re-runs the fast preview and drops it.',
+      refined: 'refined',
+      phases: {
+        reading: 'Reading the image…',
+        quantize: 'Settling the colors…',
+        trace: 'Tracing…',
+        smooth: 'Smoothing the outlines…',
+        anchors: 'Placing the anchor points…',
+        curves: 'Fitting the Bézier curves…',
+        assemble: 'Assembling the image…'
+      },
+
       tips: {
         colorCount: 'How many colors the vector will have. The image is reduced to this palette before tracing, and the shapes are forced back onto it afterwards — the engine has no color count of its own and reinvents shades per region unless the palette is imposed.',
-        workingSize: 'The image is traced at this size. It is the strongest detail lever and the one that costs the most: the trace runs in one uninterruptible pass, so a busy image at 1536 px already takes seconds and megabytes of path data.',
-        mode: 'How outlines are drawn. Smooth curves fit Béziers, straight segments keep polygons, and pixel edges follow the raster staircase exactly.',
+        workingSize: 'The image is traced at this size — and a smaller image is enlarged to reach it rather than traced at its own. At native size a small drawing hands the engine a one-pixel staircase, and every shade in an antialiased edge becomes a shape. It is the strongest detail lever and the one that costs the most: the trace runs in one uninterruptible pass, so 1536 px already takes seconds and megabytes of path data.',
+        mode: 'How outlines are drawn. Straight segments keep polygons, pixel edges follow the raster staircase exactly, and smooth curves fit Béziers.',
         stacking: 'Stacked paints each region over the ones below, which never leaves seams. Cut out punches holes instead, giving smaller files and true transparency between shapes.',
         cornerThreshold: 'How sharp a turn has to be, in degrees, to stay a corner instead of being smoothed into a curve. Lower keeps more corners.',
         lengthThreshold: 'Subdivision keeps splitting until every segment is shorter than this. Lower follows the outline more closely and costs more points.',
         spliceThreshold: 'How far a curve may swing, in degrees, before it is split into two. Lower gives more, simpler curve pieces.',
         maxIterations: 'How many smoothing passes the curve fitter runs. More settles the shape down; the gain flattens out quickly.',
         pathPrecision: 'Decimal places kept in the path coordinates. Fewer means a smaller file and slightly softer shapes.',
-        binary: 'Traces a single black shape instead of colored regions. The cleanest result for stamps, signatures and line art.',
+        tone: 'What is left of the image before it is traced. Colors keeps the hues and reduces to the palette; Shades of grey drops only the hues, and the color count becomes that many greys — the one that keeps the whole drawing without color. Black and white cuts it in two at the level the picture itself suggests, rather than the fixed one the engine uses, which loses a mid-tone subject whole.',
+        threshold: 'Pushes the black-and-white cut off the level read from the image. Left throws more to black, right throws more to white — it is how you say which side of a shadow the subject is on.',
         colorPrecision: 'How hard the engine merges neighbouring regions together. Low keeps every area separate — the faithful end. High simplifies and shrinks the file, and past 5 the engine collapses the whole image into a single path, which is where the slider stops.',
         layerDifference: 'How far two shades must sit apart before they become separate layers. Higher merges gradients into fewer, flatter regions.',
-        filterSpeckle: 'Discards patches smaller than this many pixels — the fastest way to clear scanner noise and JPEG artefacts.',
+        filterSpeckle: 'Discards patches smaller than this many pixels of the source image — the fastest way to clear scanner noise and JPEG artefacts. When the image is enlarged to the working size the figure is scaled with it, or a four-pixel blot would sail through covering two hundred.',
         background: 'Painted behind the traced shapes. Transparent leaves the SVG see-through.'
       }
     },
@@ -335,7 +377,7 @@ const dict = {
       decodeFail: 'That image could not be decoded.',
       clipboard: 'The clipboard is not available here — use Download SVG instead.',
       traceFail: 'Could not vectorize that image.',
-      emptyTrace: 'These settings discarded the whole image. Black and white drops mid-tones entirely — lower the speckle filter or turn black and white off.'
+      emptyTrace: 'These settings discarded the whole image. Lower the speckle filter, or, in black and white, move the cut adjustment — it may have pushed the whole picture to one side.'
     }
   },
 
@@ -437,7 +479,7 @@ const dict = {
       viewVector: 'Vector',
       viewOriginal: 'Origineel',
       imageType: 'Soort afbeelding',
-      presets: {auto: 'Automatisch', clipart: 'Clipart', photo: 'Foto', drawing: 'Lijntekening', logo: 'Logo', mono: 'Twee kleuren'},
+      presets: {auto: 'Automatisch', clipart: 'Clipart', photo: 'Foto', drawing: 'Lijntekening', logo: 'Logo', mono: 'Zwart-wit'},
       colorCount: 'Kleuren',
       reading: 'De kleuren van de afbeelding lezen…',
       colorNote: 'De afbeelding wordt tot deze kleuren teruggebracht voordat hij getraceerd wordt. Minder kleuren geven schonere vormen en een kleiner bestand; meer kleuren behouden de schaduwen.',
@@ -455,7 +497,9 @@ const dict = {
       maxIterations: 'Verzachtingspassen',
       pathPrecision: 'Coördinaatprecisie',
       palette: 'Kleuren',
-      binary: 'In zwart-wit traceren',
+      tone: 'Toon',
+      tones: {color: 'Kleuren', gray: 'Grijstinten', mono: 'Zwart-wit'},
+      threshold: 'Grens bijstellen',
       colorPrecision: 'Kleuren samenvoegen',
       layerDifference: 'Laagverschil',
       filterSpeckle: 'Spikkels filteren',
@@ -466,7 +510,10 @@ const dict = {
       download: 'SVG downloaden',
       copy: 'SVG-code kopiëren',
       copied: 'Gekopieerd',
-      editHint: 'Klik op een vorm om hem te verkleuren of te wissen',
+      editHint: 'Klik op een vorm om hem te verkleuren of te wissen · scroll om in te zoomen',
+      paletteColor: 'Deze kleur in de hele tekening vervangen',
+      paletteHint: 'Klik op een paletkleur om die in elke vorm die hem gebruikt te wijzigen',
+      resetColors: 'Kleuren herstellen',
       shapeColor: 'Vormkleur',
       deleteShape: 'Vorm wissen',
       deselect: 'Deselecteren',
@@ -475,20 +522,36 @@ const dict = {
       stylize: 'Dit icoon stileren',
       suffix: '-vector',
 
+      refineTitle: 'Verfijnen',
+      refineRun: 'Verfijnen',
+      refineBusy: 'Verfijnen…',
+      refineNote: 'Eén trage doorloop: het palet wordt opnieuw gecentreerd op de pixels die elke kleur kozen, de afbeelding wordt op twee keer het werkformaat getraceerd, en elke contour wordt opnieuw opgebouwd — ontspannen, teruggebracht tot de ankerpunten die ertoe doen, en opnieuw als béziers gepast. De moeite waard bij fotos en scans, waar de engine elke ruisbobbel van de raster volgt; schone illustraties komen er al dicht bij hun beste uit. Daarna een instelling aanraken start de snelle voorvertoning en gooit het weg.',
+      refined: 'verfijnd',
+      phases: {
+        reading: 'Afbeelding lezen…',
+        quantize: 'Kleuren laten zakken…',
+        trace: 'Traceren…',
+        smooth: 'Contouren gladstrijken…',
+        anchors: 'Ankerpunten plaatsen…',
+        curves: 'Bézier-curven passen…',
+        assemble: 'Afbeelding samenstellen…'
+      },
+
       tips: {
         colorCount: 'Hoeveel kleuren de vector krijgt. De afbeelding wordt vóór het traceren tot dit palet teruggebracht, en de vormen worden er daarna weer op vastgezet — de engine heeft zelf geen kleurentelling en verzint per gebied tinten als het palet niet wordt opgelegd.',
-        workingSize: 'De afbeelding wordt op dit formaat getraceerd. Het is de sterkste detailknop en de duurste: het traceren gebeurt in één ononderbroken pass, dus een drukke afbeelding op 1536 px kost al seconden en megabytes aan paddata.',
-        mode: 'Hoe omtrekken getekend worden. Vloeiende curven fitten béziers, rechte segmenten houden veelhoeken, en pixelranden volgen het rastertrapje precies.',
+        workingSize: 'De afbeelding wordt op dit formaat getraceerd — en een kleinere afbeelding wordt ernaartoe vergroot in plaats van op haar eigen formaat getraceerd. Op ware grootte geeft een kleine tekening de engine een trapje van één pixel, en wordt elke tint in een verzachte rand een eigen vorm. Het is de sterkste detailknop en de duurste: het traceren gebeurt in één ononderbroken pass, dus 1536 px kost al seconden en megabytes aan paddata.',
+        mode: 'Hoe omtrekken getekend worden. Rechte segmenten houden veelhoeken, pixelranden volgen het rastertrapje precies, en vloeiende curven fitten béziers.',
         stacking: 'Gestapeld schildert elk gebied over de onderliggende heen, wat nooit naden geeft. Uitgesneden ponst in plaats daarvan gaten, wat kleinere bestanden en echte transparantie tussen vormen oplevert.',
         cornerThreshold: 'Hoe scherp een bocht moet zijn, in graden, om hoek te blijven in plaats van tot curve verzacht te worden. Lager houdt meer hoeken.',
         lengthThreshold: 'De onderverdeling gaat door tot elk segment korter is dan dit. Lager volgt de omtrek nauwer en kost meer punten.',
         spliceThreshold: 'Hoe ver een curve mag draaien, in graden, voordat hij in tweeën gesplitst wordt. Lager geeft meer en eenvoudiger curvestukken.',
         maxIterations: 'Hoeveel verzachtingspassen de curvefitter draait. Meer laat de vorm bezinken; de winst vlakt snel af.',
         pathPrecision: 'Decimalen die in de padcoördinaten bewaard blijven. Minder geeft een kleiner bestand en iets zachtere vormen.',
-        binary: 'Traceert één zwarte vorm in plaats van gekleurde gebieden. Het schoonste resultaat voor stempels, handtekeningen en lijntekeningen.',
+        tone: 'Wat er van de afbeelding overblijft voordat ze wordt getraceerd. Kleuren houdt de tinten en brengt terug tot het palet; Grijstinten laat alleen de tinten vallen, en de kleurentelling wordt dat aantal grijzen — die houdt de hele tekening zonder kleur. Zwart-wit snijdt in tweeën op het niveau dat de afbeelding zelf aangeeft, en niet op het vaste niveau van de engine, dat een onderwerp in middentoon volledig laat verdwijnen.',
+        threshold: 'Duwt de zwart-witgrens weg van het niveau dat uit de afbeelding is gelezen. Naar links gaat er meer naar zwart, naar rechts meer naar wit — zo geef je aan aan welke kant van een schaduw het onderwerp ligt.',
         colorPrecision: 'Hoe hard de engine naburige gebieden samenvoegt. Laag houdt elk gebied apart — de getrouwe kant. Hoog vereenvoudigt en verkleint het bestand, en boven 5 klapt de engine de hele afbeelding tot één pad, en daar stopt de schuif dus.',
         layerDifference: 'Hoe ver twee tinten uit elkaar moeten liggen voor ze aparte lagen worden. Hoger voegt verlopen samen tot minder, vlakkere gebieden.',
-        filterSpeckle: 'Gooit vlekken kleiner dan zoveel pixels weg — de snelste manier om scannerruis en JPEG-artefacten op te ruimen.',
+        filterSpeckle: 'Gooit vlekken kleiner dan zoveel pixels van de oorspronkelijke afbeelding weg — de snelste manier om scannerruis en JPEG-artefacten op te ruimen. Wordt de afbeelding naar het werkformaat vergroot, dan schaalt dit getal mee, anders zou een vlek van vier pixels er tweehonderd groot doorheen glippen.',
         background: 'Achter de getraceerde vormen geschilderd. Transparant laat de SVG doorschijnen.'
       }
     },
@@ -504,7 +567,7 @@ const dict = {
       decodeFail: 'Die afbeelding kon niet gedecodeerd worden.',
       clipboard: 'Het klembord is hier niet beschikbaar — gebruik SVG downloaden.',
       traceFail: 'Die afbeelding kon niet gevectoriseerd worden.',
-      emptyTrace: 'Deze instellingen hebben de hele afbeelding weggegooid. Zwart-wit laat middentinten volledig vallen — verlaag het spikkelfilter of zet zwart-wit uit.'
+      emptyTrace: 'Deze instellingen hebben de hele afbeelding weggegooid. Verlaag het spikkelfilter, of verschuif bij zwart-wit de grens — die kan de hele afbeelding naar één kant hebben geduwd.'
     }
   }
 }

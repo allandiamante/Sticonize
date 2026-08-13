@@ -1,10 +1,10 @@
 <script setup>
-import { MODES, STACKING, WORK_SIZES, MAX_COLOR_PRECISION } from '../vector.js'
+import { MODES, STACKING, TONES, WORK_SIZES, MAX_COLOR_PRECISION, MAX_THRESHOLD } from '../vector.js'
 import { t } from '../i18n.js'
 import InfoTip from './InfoTip.vue'
 
-defineProps({ opts: Object, canExport: Boolean, copied: Boolean })
-const emit = defineEmits(['download', 'copy', 'stylize'])
+defineProps({ opts: Object, canExport: Boolean, copied: Boolean, refining: Boolean, canRefine: Boolean })
+const emit = defineEmits(['download', 'copy', 'stylize', 'refine'])
 
 const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
 </script>
@@ -65,19 +65,28 @@ const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
     <div class="divider"></div>
     <p class="eyebrow">{{ t.vec.palette }}</p>
 
-    <div class="check-row">
-      <label class="check"><input type="checkbox" v-model="opts.binary"> {{ t.vec.binary }}</label>
-      <InfoTip :tip="t.vec.tips.binary" />
+    <div class="ctrl">
+      <div class="ctrl-head"><label for="tone">{{ t.vec.tone }}</label><InfoTip :tip="t.vec.tips.tone" /></div>
+      <select id="tone" v-model="opts.tone">
+        <option v-for="x in TONES" :key="x" :value="x">{{ t.vec.tones[x] }}</option>
+      </select>
+    </div>
+
+    <!-- the cut is read off the image, so this only exists to move it: no slider at all
+         would leave no way to say which side of a shadow the subject is on -->
+    <div v-if="opts.tone === 'mono'" class="ctrl">
+      <div class="ctrl-head"><label for="threshold">{{ t.vec.threshold }}</label><output>{{ opts.threshold > 0 ? '+' : '' }}{{ opts.threshold }}</output><InfoTip :tip="t.vec.tips.threshold" /></div>
+      <input id="threshold" type="range" :min="-MAX_THRESHOLD" :max="MAX_THRESHOLD" step="1" v-model.number="opts.threshold">
     </div>
 
     <div class="ctrl">
       <div class="ctrl-head"><label for="colorPrecision">{{ t.vec.colorPrecision }}</label><output>{{ opts.colorPrecision }}</output><InfoTip :tip="t.vec.tips.colorPrecision" /></div>
-      <input id="colorPrecision" type="range" min="1" :max="MAX_COLOR_PRECISION" step="1" :disabled="opts.binary" v-model.number="opts.colorPrecision">
+      <input id="colorPrecision" type="range" min="1" :max="MAX_COLOR_PRECISION" step="1" :disabled="opts.tone === 'mono'" v-model.number="opts.colorPrecision">
     </div>
 
     <div class="ctrl">
       <div class="ctrl-head"><label for="layerDifference">{{ t.vec.layerDifference }}</label><output>{{ opts.layerDifference }}</output><InfoTip :tip="t.vec.tips.layerDifference" /></div>
-      <input id="layerDifference" type="range" min="0" max="128" step="1" :disabled="opts.binary" v-model.number="opts.layerDifference">
+      <input id="layerDifference" type="range" min="0" max="128" step="1" :disabled="opts.tone === 'mono'" v-model.number="opts.layerDifference">
     </div>
 
     <div class="ctrl">
@@ -101,6 +110,14 @@ const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
         <input type="color" :title="t.vec.customBg" :value="opts.background === 'transparent' ? '#ffffff' : opts.background" @input="opts.background = $event.target.value">
       </div>
     </div>
+
+    <div class="divider"></div>
+    <p class="eyebrow">{{ t.vec.refineTitle }}</p>
+
+    <button class="btn" :disabled="!canRefine" @click="emit('refine')">
+      {{ refining ? t.vec.refineBusy : t.vec.refineRun }}
+    </button>
+    <p class="note">{{ t.vec.refineNote }}</p>
 
     <div class="divider"></div>
     <p class="eyebrow">{{ t.vec.output }}</p>

@@ -37,12 +37,16 @@ assert.equal(wild.spliceThreshold, 0)
 assert.equal(wild.maxIterations, 1)
 assert.equal(wild.pathPrecision, 8)
 
-// an unknown enum falls back instead of reaching the engine as garbage
-assert.equal(traceOptions({...PRESETS.auto, mode: 'nope'}).mode, 'spline')
+// an unknown enum falls back instead of reaching the engine as garbage, onto the same
+// mode the default trace uses
+assert.equal(traceOptions({...PRESETS.auto, mode: 'nope'}).mode, 'polygon')
+assert.equal(MODES[0], 'polygon', 'and the panel offers that one first')
 assert.equal(traceOptions({...PRESETS.auto, hierarchical: 'nope'}).hierarchical, 'stacked')
 
-// binary is a real boolean, whatever the checkbox hands over
-assert.equal(traceOptions({...PRESETS.auto, binary: undefined}).binary, false)
+// the engine gets a boolean, and only the black-and-white tone turns it on: grey is a
+// palette of greys, which is a colour trace as far as the engine is concerned
+assert.equal(traceOptions({...PRESETS.auto, tone: undefined}).binary, false)
+assert.equal(traceOptions({...PRESETS.auto, tone: 'gray'}).binary, false)
 assert.equal(traceOptions({...PRESETS.mono}).binary, true)
 
 // the integer fields are integers: vtracer parses them as such
