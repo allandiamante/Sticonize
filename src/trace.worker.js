@@ -2,7 +2,7 @@ import init, { to_svg } from 'vtracer-wasm'
 // the glue's default path resolves to `vtracer_bg.wasm`, but the package ships
 // `vtracer.wasm` — passing the URL explicitly is what keeps init from 404ing
 import wasmUrl from 'vtracer-wasm/vtracer.wasm?url'
-import { fitSize, tonemap, quantize, snapFills, finishSvg } from './trace-core.js'
+import { fitSize, tonemap, quantize, fillTransparent, dropFill, snapFills, finishSvg } from './trace-core.js'
 import { refineSvg } from './refine.js'
 
 let booting
@@ -57,6 +57,11 @@ self.onmessage = async ({data}) => {
     if(refine) await phase('quantize')
     tonemap(image, tone, threshold)
     const palette = quantize(image, colors)
+    // stacking colour layers is the only mode that reads the alpha channel, so the other
+    // two are handed something opaque instead of the background they would invent
+    const key = options.binary || options.hierarchical === 'cutout'
+      ? fillTransparent(image, palette, options.binary)
+      : ''
 
     if(refine) await phase('trace')
     await engine()
@@ -73,7 +78,7 @@ self.onmessage = async ({data}) => {
     // a bad enum or an out-of-range field aborts the wasm instead of returning; the
     // instance survives it, so this only has to reach the caller as a normal failure
     const raw = to_svg(new Uint8Array(image.data.buffer), image.width, image.height, sized)
-    let svg = snapFills(finishSvg(raw, image.width, image.height), palette)
+    let svg = snapFills(dropFill(finishSvg(raw, image.width, image.height), key), palette)
     // settings can legitimately discard everything — binary mode drops mid-tones whole,
     // and a large speckle filter eats small art. That returns valid but empty markup,
     // so it has to be reported rather than shown as a blank board.

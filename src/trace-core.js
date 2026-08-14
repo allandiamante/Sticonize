@@ -211,7 +211,11 @@ export function quantize(image, colors){
   const cache = new Int16Array(32768).fill(-1)
   const used = new Uint8Array(palette.length)
   for(let p = 0; p < data.length; p += 4){
-    if(data[p + 3] < 128){ data[p + 3] = 0; continue }
+    // the colour under a transparent pixel is cleared along with the alpha, because the
+    // engine reads it anyway. In the source those pixels are one flat colour and it never
+    // shows, but resampling to the working size mixes the drawing into them — and a
+    // transparent region carrying a spread of colours comes back as a traced background
+    if(data[p + 3] < 128){ data[p] = data[p + 1] = data[p + 2] = data[p + 3] = 0; continue }
     data[p + 3] = 255
     const key = (data[p] >> 3) << 10 | (data[p + 1] >> 3) << 5 | data[p + 2] >> 3
     let k = cache[key]
@@ -235,6 +239,66 @@ export function quantize(image, colors){
   return palette
     .filter((_, i) => used[i])
     .map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''))
+}
+
+/* The colours the transparency may be filled with. Corners of the colour cube, because
+   the only thing the fill has to be is far from everything the drawing is painted in.
+   White and black are not offered: artwork uses them, and a fill the drawing shares is a
+   fill that cannot be told back out of the trace. */
+const KEYS = [[255, 0, 255], [0, 255, 0], [0, 255, 255], [255, 255, 0], [255, 0, 0], [0, 0, 255]]
+
+/* How close a traced fill has to sit to the key colour to be the filled transparency
+   rather than the drawing. The filled region is one flat colour, so its shape comes back
+   in the key itself, give or take the speckles the engine merged into it. */
+const NEAR = 3 * 32 ** 2
+
+/* Distance from a colour to the nearest entry of a palette.
+   Takes an [r,g,b] and the palette as [r,g,b]s; returns the squared distance. */
+const spread = (c, rgb) => rgb.reduce(
+  (min, e) => Math.min(min, (c[0] - e[0]) ** 2 + (c[1] - e[1]) ** 2 + (c[2] - e[2]) ** 2), Infinity)
+
+/* Paints the transparent pixels an opaque colour, because the engine only reads the alpha
+   channel while it stacks colour layers. Cutting out replaces every transparent pixel with
+   a colour of its own and lays that under the drawing, and black-and-white reads them as
+   ink — either way artwork that had no background comes back with one.
+   Black and white gets white, which is background there by definition and needs nothing
+   done to the trace afterwards. Colour gets whichever candidate sits furthest from the
+   palette, so the fill neither merges into the region beside it nor passes for one on the
+   way out; dropFill takes those shapes off the trace.
+   Takes the ImageData (mutated), the palette from quantize and whether the trace is black
+   and white; returns the fill to drop afterwards, or '' when there is nothing to drop. */
+export function fillTransparent(image, palette, mono){
+  const {data} = image
+  let transparent = false
+  for(let p = 3; p < data.length; p += 4) if(!data[p]){ transparent = true; break }
+  if(!transparent) return ''
+
+  const rgb = palette.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)))
+  const key = mono ? [255, 255, 255]
+    : KEYS.reduce((best, c) => spread(c, rgb) > spread(best, rgb) ? c : best)
+
+  for(let p = 0; p < data.length; p += 4){
+    if(data[p + 3]) continue
+    data[p] = key[0]; data[p + 1] = key[1]; data[p + 2] = key[2]; data[p + 3] = 255
+  }
+  return mono ? '' : '#' + key.map(v => v.toString(16).padStart(2, '0')).join('')
+}
+
+/* Takes the shapes the engine drew over the filled transparency back off the trace. They
+   are the only ones painted anywhere near the key colour — that is what picking it far
+   from the palette bought.
+   Runs before snapFills, which would otherwise pull the key onto a palette entry and turn
+   the background into a colour of the drawing.
+   Takes the traced SVG and the key colour, '' for nothing to drop; returns the markup. */
+export function dropFill(svg, key){
+  if(!key) return svg
+  const c = [1, 3, 5].map(i => parseInt(key.slice(i, i + 2), 16))
+  return svg.replace(/<path\b[^>]*?\/>/g, shape => {
+    const hex = (shape.match(/fill="#([0-9a-fA-F]{6})"/) || [])[1]
+    if(!hex) return shape
+    const f = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16))
+    return spread(f, [c]) < NEAR ? '' : shape
+  })
 }
 
 /* Forces the traced shapes back onto the chosen palette.

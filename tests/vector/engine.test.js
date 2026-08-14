@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { initSync, to_svg } from 'vtracer-wasm'
-import { finishSvg } from '../../src/trace-core.js'
+import { quantize, fillTransparent, dropFill, finishSvg } from '../../src/trace-core.js'
 import { traceOptions, withBackground, countPaths, countColors, PRESETS, MAX_COLOR_PRECISION } from '../../src/vector.js'
 
 initSync({ module: fs.readFileSync('node_modules/vtracer-wasm/vtracer.wasm') })
@@ -46,6 +46,33 @@ assert.equal(countColors(svg), 2)
 const cut = trace(disc(S, true), PRESETS.auto)
 assert.equal(countPaths(cut), 1)
 assert.equal(countColors(cut), 1)
+
+// ...but only while the engine stacks colour layers. Cutting out replaces the transparent
+// pixels with a colour of its own and lays them under the drawing, and black-and-white
+// reads them as ink: both hand back a background the source never had. Pinned, because
+// both are the whole reason fillTransparent exists — if a future build starts honouring
+// alpha everywhere, this fails and the fill can go.
+// how far the widest shape of a trace reaches, in pixels. Coordinates are relative to each
+// shape's own origin, so this is a size rather than a position: a background covers the
+// canvas, the disc two thirds of it — and it reads the same whether the shape is drawn in
+// straight segments or splines
+const widest = svg => Math.max(...[...svg.matchAll(/<path d="([^"]*)"/g)]
+  .flatMap(m => [...m[1].matchAll(/[\d.]+/g)].map(Number)))
+const backdrop = svg => widest(svg) > S * 0.9
+for(const preset of [PRESETS.logo, PRESETS.mono]){
+  const mono = preset.tone === 'mono'
+  const name = `${preset.tone}/${preset.hierarchical}`
+  // black-and-white is fed the black-on-white art it is meant for, as above
+  const art = () => disc(S, true, mono ? [20, 20, 20] : [228, 97, 74])
+
+  assert.ok(backdrop(trace(art(), preset)), `${name}: the engine still invents a background`)
+
+  const image = {data: art(), width: S, height: S}
+  const key = fillTransparent(image, quantize(image, 8), mono)
+  const out = dropFill(trace(image.data, preset), key)
+  assert.ok(!backdrop(out), `${name}: the fill leaves no background behind`)
+  assert.equal(countPaths(out), 1, `${name}: and the drawing is all that is left`)
+}
 
 // every preset produces usable markup rather than throwing. The black-and-white preset
 // thresholds on luminance, so it is fed the black-on-white art it is meant for — which

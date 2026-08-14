@@ -138,6 +138,15 @@ assert.ok(cutPalette.length >= 1)
 assert.equal(cut.data[3], 255, 'opaque pixels stay opaque')
 assert.equal(cut.data[(Math.floor(S * 0.75)) * 4 + 3], 0, 'transparent pixels stay transparent')
 
+// ...and lose the colour underneath them along with the alpha. The engine reads that colour
+// whatever the alpha says. In a source file it is one flat value and never shows, but
+// scaling up to the working size smears the drawing into it, and a transparent region
+// carrying a spread of colours is exactly what comes back as a traced background — art that
+// was cleanly cut out arrives with a backdrop it never had.
+const clear = Math.floor(S * 0.75) * 4
+assert.deepEqual([...cut.data.slice(clear, clear + 4)], [0, 0, 0, 0],
+  'quantize leaves no colour under a transparent pixel')
+
 // a fully transparent image has no colours to offer, and must not throw looking
 const blank = {data: new Uint8ClampedArray(S * S * 4), width: S, height: S}
 assert.deepEqual(quantize(blank, 8), [])
