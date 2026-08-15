@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#14181A">
+  <!-- wasm-unsafe-eval: Chromium refuses to compile the vtracer WebAssembly module under a
+       bare script-src 'self'. It permits WebAssembly only — not eval() or inline script. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.iconify.design; connect-src 'self' https://api.iconify.design; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <link rel="icon" href="/src/public/sticonize-logo-background.svg">
+
+  <!-- This page exists as its own HTML file, not as a client-side route, so a crawler
+       fetching /vectorize reads a title and a body about vectorization instead of the
+       scribble page's. router.js keeps the title in step after that. -->
+  <title>Free Vectorizer — PNG, JPG or WEBP to SVG · Sticonize</title>
+  <meta name="description" content="Free online vectorization: drop a PNG, JPG or WEBP and get a clean, editable SVG back. Runs entirely in your browser — no signup, no upload, no watermark.">
+  <link rel="canonical" href="https://sticonize.com/vectorize">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sticonize">
+  <meta property="og:url" content="https://sticonize.com/vectorize">
+  <meta property="og:title" content="Free Vectorizer — PNG, JPG or WEBP to SVG">
+  <meta property="og:description" content="Free online vectorization: drop a PNG, JPG or WEBP and get a clean, editable SVG back. No signup, nothing leaves your browser.">
+  <meta property="og:image" content="https://sticonize.com/og.png">
+  <meta property="og:image:width" content="1024">
+  <meta property="og:image:height" content="1024">
+  <meta property="og:image:alt" content="Sticonize logo, hand-drawn">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Sticonize Vectorizer",
+    "url": "https://sticonize.com/vectorize",
+    "description": "Free online vectorizer: trace a PNG, JPG or WEBP into a clean, editable SVG in the browser.",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Any (web browser)",
+    "inLanguage": ["en", "pt-BR", "nl"],
+    "isAccessibleForFree": true,
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <h1>Free vectorizer</h1>
+    <p>Drop a PNG, JPG or WEBP — get a clean, editable SVG back.</p>
+    <h2>Free online vectorization, in your browser</h2>
+    <p>
+      Sticonize traces a bitmap image into real vector paths: pick how many colours to
+      keep, how tightly the curves follow the pixels, and how much of the noise to drop.
+      Vectorization runs locally in your browser — your image is never uploaded.
+    </p>
+    <ul>
+      <li>Convert PNG to SVG, JPG to SVG or WEBP to SVG, free and without a signup</li>
+      <li>Colour, greyscale or black-and-white tracing, with a colour palette you choose up front</li>
+      <li>Zoom, threshold and speckle controls, plus undo, to tune the trace before you export</li>
+      <li>Send the traced SVG straight to the <a href="/">hand-drawn scribble tool</a></li>
+      <li>Transparent backgrounds preserved, dark and light themes, English, Portuguese and Dutch</li>
+    </ul>
+    <p>Free image vectorization, no watermark, no account.</p>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

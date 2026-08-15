@@ -25,9 +25,9 @@ server {
   # the tracer's .wasm is ~134 KB uncompressed and every visitor to /vectorize pulls it
   gzip_types text/css application/javascript image/svg+xml application/xml application/wasm;
 
-  # The app routes /vectorize itself, so a deep link or a refresh has to reach index.html
-  # instead of 404ing on a file that was never built.
-  location / { try_files $uri $uri/ /index.html; }
+  # $uri.html: /vectorize is built as its own vectorize.html, and it must be served without a
+  # redirect to a /vectorize/ form. Anything else the app routes falls through to index.html.
+  location / { try_files $uri $uri.html $uri/ /index.html; }
 
   # frame-ancestors is the only CSP directive <meta> ignores — it only works as a header.
   # The rest of the policy stays in index.html.
