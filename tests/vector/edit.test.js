@@ -39,7 +39,7 @@ assert.deepEqual(shapeFills(bare), ['#000000', '#000000'])
 
 // the board tags every shape with its index so a click can name it, and marks the
 // selected one — neither may reach the export
-const board = editPaths(traced, {}, true, 2)
+const board = editPaths(traced, {}, true, new Set([2]))
 assert.ok(board.includes('data-shape="0"') && board.includes('data-shape="2"'))
 assert.equal((board.match(/class="sel"/g) || []).length, 1)
 assert.ok(board.includes('data-shape="2" class="sel"'))
@@ -55,7 +55,7 @@ assert.ok(boardCut.includes('data-shape="1"') && boardCut.includes('data-shape="
 assert.ok(!boardCut.includes('class="sel"'))
 
 // the background rect is not a shape: it must never take an index or shift the numbering
-const withBg = editPaths(withBackground(traced, '#ff0000'), {}, true, 0)
+const withBg = editPaths(withBackground(traced, '#ff0000'), {}, true, new Set([0]))
 assert.equal((withBg.match(/data-shape=/g) || []).length, 3)
 assert.ok(withBg.indexOf('<rect') < withBg.indexOf('data-shape="0"'))
 
@@ -94,3 +94,13 @@ assert.equal(countColors(layered), 3)
 
 // and the indices still count positions in the untouched trace: swapping moves no shape
 assert.equal(countPaths(editPaths(swapFills(many, {'#e4614a': '#00ff00'}), {0: {removed: true}})), 2)
+
+// ---- more than one shape selected --------------------------------------------------
+// ctrl+click builds a group, and every shape in it carries the mark
+const group = editPaths(traced, {}, true, new Set([0, 2]))
+assert.equal((group.match(/class="sel"/g) || []).length, 2)
+assert.ok(group.includes('data-shape="0" class="sel"') && group.includes('data-shape="2" class="sel"'))
+assert.ok(group.includes('data-shape="1"') && !group.includes('data-shape="1" class="sel"'))
+
+// an empty selection marks nothing
+assert.ok(!editPaths(traced, {}, true, new Set()).includes('class="sel"'))

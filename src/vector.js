@@ -146,8 +146,8 @@ export function swapFills(svg, swaps){
    in the untouched trace, so deleting one never renumbers the ones after it and a
    selection stays pointing at the same shape.
    Takes the traced SVG, the edits keyed by shape index, whether to tag each shape with
-   its index for the board, and which index is selected. The tags and the selection are
-   board-only: the export must not carry them.
+   its index for the board, and a Set of the selected indices. The tags and the selection
+   are board-only: the export must not carry them.
    Returns the rewritten markup. */
 export function editPaths(svg, edits, tagged = false, selected = null){
   let i = -1
@@ -156,21 +156,26 @@ export function editPaths(svg, edits, tagged = false, selected = null){
     const edit = edits?.[n]
     if(edit?.removed) return ''
     let out = edit?.fill ? paint(shape, edit.fill) : shape
-    if(tagged) out = out.replace('<path', `<path data-shape="${n}"${n === selected ? ' class="sel"' : ''}`)
+    if(tagged) out = out.replace('<path', `<path data-shape="${n}"${selected?.has(n) ? ' class="sel"' : ''}`)
     return out
   })
 }
 
-/* Records what a reactive map held at a key just before it changes, so undoEdit can put
-   it back — the recolour or delete itself still happens at the call site.
+/* Records what a reactive map held at one or more keys just before they change, so
+   undoEdit can put them back — the recolour or delete itself still happens at the call
+   site. A group of keys recorded together undoes together, which is what a colour
+   dropped on several selected shapes at once has to do.
    A colour input fires all the way through a drag in the picker, hundreds of times for
-   one colour someone picked once, so a record that lands on the key the open step is
-   already holding folds into it: the whole drag undoes as one step. sealEdit ends it.
-   Takes the history array, the map about to change, and the key; returns nothing. */
+   one colour someone picked once, so a record that lands on the same keys the open step
+   is already holding folds into it: the whole drag undoes as one step. sealEdit ends it.
+   Takes the history array, the map about to change, and a key or an array of keys;
+   returns nothing. */
 export function recordEdit(history, map, key){
+  const keys = Array.isArray(key) ? key : [key]
   const top = history[history.length - 1]
-  if(top?.open && top.map === map && top.key === key) return
-  history.push({map, key, prev: map[key], open: true})
+  if(top?.open && top.map === map && top.keys.length === keys.length
+     && top.keys.every((k, i) => k === keys[i])) return
+  history.push({map, keys, prev: keys.map(k => map[k]), open: true})
 }
 
 /* Closes the step on top of the history, so the next record starts a new one rather than
@@ -183,13 +188,20 @@ export function sealEdit(history){
 }
 
 /* Reverses the most recently recorded change: a key that had nothing before is deleted,
-   otherwise it's put back to what it held.
-   Takes the history array; returns nothing. */
-export function undoEdit(history){
+   otherwise it's put back to what it held. What the key held on the way out is recorded
+   on the opposite stack, so undo and redo are the same move read in either direction —
+   redo is this function called with the stacks swapped.
+   Takes the stack to reverse a step from and optionally the stack to record it on;
+   returns nothing. */
+export function undoEdit(history, redo){
   const last = history.pop()
   if(!last) return
-  if(last.prev === undefined) delete last.map[last.key]
-  else last.map[last.key] = last.prev
+  const cur = last.keys.map(k => last.map[k])
+  last.keys.forEach((k, i) => {
+    if(last.prev[i] === undefined) delete last.map[k]
+    else last.map[k] = last.prev[i]
+  })
+  redo?.push({map: last.map, keys: last.keys, prev: cur})
 }
 
 /* Formats a byte count for display.

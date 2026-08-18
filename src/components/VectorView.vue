@@ -32,28 +32,49 @@ const activePreset = computed(() =>
 
 const edits = reactive({})
 const swaps = reactive({})
-const selected = ref(null)
+// the shapes under edit, in the order they were picked — a plain click starts a new one,
+// ctrl/cmd-click adds to it and takes back out of it
+const selected = ref(new Set())
 const editCount = computed(() => Object.keys(edits).length)
 const swapCount = computed(() => Object.keys(swaps).length)
 
 // one entry per shape edit or palette swap, in the order they happened — each records
 // which reactive map it touched and what was there before, so undo just puts it back
 const history = []
+// steps undone and available to put back, dropped the moment a new edit lands
+const redo = []
+
+/* Records a change on the undo stack and drops whatever was waiting to be redone —
+   once someone edits again, the branch they undid off is gone.
+   Takes the reactive map about to change and a key or an array of keys; returns
+   nothing. */
+function record(map, key){
+  redo.length = 0
+  recordEdit(history, map, key)
+}
 
 // the indices and the colours only mean anything against the trace they were made on
 watch(result, () => {
-  selected.value = null
+  selected.value.clear()
   for(const k of Object.keys(edits)) delete edits[k]
   for(const k of Object.keys(swaps)) delete swaps[k]
-  history.length = 0
+  history.length = redo.length = 0
 })
 
-/* Ctrl/Cmd+Z undoes the last edit or swap; browsers have no native undo to fight here
-   since the board isn't an editable text field. */
+/* Ctrl/Cmd+Z undoes the last edit or swap, Ctrl+Y or Ctrl/Cmd+Shift+Z puts it back —
+   both spellings of redo, since Windows and the rest of the world disagree on it.
+   Browsers have no native undo to fight here since the board isn't an editable text
+   field. */
 function onKeydown(e){
-  if(!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return
+  if(!(e.ctrlKey || e.metaKey)) return
+  const key = e.key.toLowerCase()
+  const undo = key === 'z' && !e.shiftKey
+  const again = key === 'y' || (key === 'z' && e.shiftKey)
+  if(!undo && !again) return
   e.preventDefault()
-  undoEdit(history)
+  // redo is undo read backwards: the same step moved back across the two stacks
+  if(undo) undoEdit(history, redo)
+  else undoEdit(redo, history)
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
@@ -74,22 +95,31 @@ const board = computed(() =>
 const palette = computed(() => result.value?.palette ?? [])
 
 const fills = computed(() => recolored.value ? shapeFills(recolored.value) : [])
+const selCount = computed(() => selected.value.size)
+// what the swatch shows and the picker opens on: the shape picked last, since a group can
+// hold as many colours as it has shapes
+const lastPicked = computed(() => [...selected.value].pop() ?? null)
 const selectedFill = computed(() =>
-  selected.value === null ? null : edits[selected.value]?.fill ?? fills.value[selected.value])
+  lastPicked.value === null ? null : edits[lastPicked.value]?.fill ?? fills.value[lastPicked.value])
 
 /* Selects the shape under the pointer, or clears the selection when the click lands on
-   the background instead of a shape.
+   the background instead of a shape. Held ctrl/cmd keeps what was already selected and
+   toggles this shape in or out of it, so a group can be built up and trimmed by clicking.
    Takes the click event; returns nothing. */
 function onStagePick(e){
   const shape = e.target.closest?.('path[data-shape]')
-  selected.value = shape ? Number(shape.dataset.shape) : null
+  if(!(e.ctrlKey || e.metaKey)) selected.value.clear()
+  if(!shape) return
+  const n = Number(shape.dataset.shape)
+  // delete reports whether it was there, so one call both tests and removes
+  if(!selected.value.delete(n)) selected.value.add(n)
 }
 
-/* Repaints the selected shape.
+/* Repaints every selected shape.
    Takes a CSS colour; returns nothing. */
 function paintSelected(fill){
-  recordEdit(history, edits, selected.value)
-  edits[selected.value] = {...edits[selected.value], fill}
+  record(edits, [...selected.value])
+  for(const n of selected.value) edits[n] = {...edits[n], fill}
 }
 
 /* Ends the step a colour picker was holding open, so the next drag undoes on its own.
@@ -98,23 +128,23 @@ function endPick(){
   sealEdit(history)
 }
 
-/* Drops the selected shape from the drawing and clears the selection.
+/* Drops every selected shape from the drawing and clears the selection.
    Takes nothing; returns nothing. */
 function dropSelected(){
   // a delete is one deliberate click, never part of the drag that may have preceded it
   sealEdit(history)
-  recordEdit(history, edits, selected.value)
+  record(edits, [...selected.value])
   sealEdit(history)
-  edits[selected.value] = {...edits[selected.value], removed: true}
-  selected.value = null
+  for(const n of selected.value) edits[n] = {...edits[n], removed: true}
+  selected.value.clear()
 }
 
 /* Puts every edited shape back the way the trace left it.
    Takes nothing; returns nothing. */
 function resetEdits(){
   for(const k of Object.keys(edits)) delete edits[k]
-  selected.value = null
-  history.length = 0
+  selected.value.clear()
+  history.length = redo.length = 0
 }
 
 /* Redraws one of the palette's colours everywhere it appears.
@@ -122,7 +152,7 @@ function resetEdits(){
    to what it was drops the swap rather than recording one. Returns nothing. */
 function swapColor(from, to){
   const next = to.toLowerCase()
-  recordEdit(history, swaps, from)
+  record(swaps, from)
   if(next === from) delete swaps[from]
   else swaps[from] = next
 }
@@ -131,7 +161,7 @@ function swapColor(from, to){
    Takes nothing; returns nothing. */
 function resetColors(){
   for(const k of Object.keys(swaps)) delete swaps[k]
-  history.length = 0
+  history.length = redo.length = 0
 }
 
 const meta = computed(() => {
@@ -352,14 +382,14 @@ function stylize(){
 
       <!-- shape editing: a pointer-driven affordance, so the actions live as real
            buttons here rather than only as clicks on the drawing -->
-      <div v-if="selected !== null" class="shape-bar">
+      <div v-if="selCount" class="shape-bar">
         <label class="shape-swatch" :title="t.vec.shapeColor">
           <span :style="{background: selectedFill}"></span>
           <input type="color" :value="selectedFill" @input="paintSelected($event.target.value)" @change="endPick">
         </label>
-        <span class="shape-id">{{ selectedFill }}</span>
+        <span class="shape-id">{{ selectedFill }}{{ selCount > 1 ? ` ×${selCount}` : '' }}</span>
         <button type="button" class="chip" @click="dropSelected">{{ t.vec.deleteShape }}</button>
-        <button type="button" class="chip" @click="selected = null">{{ t.vec.deselect }}</button>
+        <button type="button" class="chip" @click="selected.clear()">{{ t.vec.deselect }}</button>
       </div>
       <div v-else-if="editCount" class="shape-bar">
         <span class="shape-id">{{ t.vec.edited(editCount) }}</span>
