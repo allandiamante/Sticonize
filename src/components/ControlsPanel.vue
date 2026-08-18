@@ -4,8 +4,8 @@ import { FILL_STYLES } from '../scribble.js'
 import InfoTip from './InfoTip.vue'
 import { t } from '../i18n.js'
 
-const props = defineProps({ opts: Object, canDownload: Boolean, count: Number, batch: String })
-const emit = defineEmits(['download', 'downloadAll'])
+const props = defineProps({ opts: Object, canDownload: Boolean, count: Number, batch: String, open: Boolean })
+const emit = defineEmits(['download', 'downloadAll', 'toggle'])
 
 const SWATCHES = ['#E8EDE9', '#14181A', '#7BA1E4', '#E4614A', '#4FA97A']
 const pngSize = ref(1024)
@@ -19,7 +19,26 @@ const args = () => [fmt.value, size(), pngBg.value]
 </script>
 
 <template>
-  <section class="col col--right">
+  <section class="col col--right" :class="{'col--tucked': !open}">
+    <!-- the only thing the rail carries: everything below it is the wall of sliders this
+         opens. Sliders, because that is what is behind it. -->
+    <button
+      type="button"
+      class="tuck"
+      :aria-expanded="open"
+      :title="t.vec.moreOptions"
+      @click="emit('toggle')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M4 6h10M18 6h2M4 12h3M11 12h9M4 18h9M17 18h3"/>
+        <circle cx="16" cy="6" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="9" cy="12" r="2" fill="currentColor" stroke="none"/>
+        <circle cx="15" cy="18" r="2" fill="currentColor" stroke="none"/>
+      </svg>
+      <span class="sr-only">{{ t.vec.moreOptions }}</span>
+    </button>
+
+    <template v-if="open">
     <p class="eyebrow">{{ t.tune }}</p>
 
     <div class="ctrl">
@@ -109,5 +128,6 @@ const args = () => [fmt.value, size(), pngBg.value]
       :disabled="!!batch"
       @click="emit('downloadAll', ...args())"
     >{{ batch || t.downloadAll(count) }}</button>
+    </template>
   </section>
 </template>

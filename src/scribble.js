@@ -294,19 +294,20 @@ export function saveBlob(blob, filename){
   setTimeout(() => URL.revokeObjectURL(url), 1500)
 }
 
-export function svgToPng(svgText, size, bg){
+export function svgToPng(svgText, w, h, bg){
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(new Blob([svgText], {type:'image/svg+xml;charset=utf-8'}))
     const img = new Image()
     img.onload = () => {
       const cv = document.createElement('canvas')
-      cv.width = cv.height = size
+      cv.width = w
+      cv.height = h
       const ctx = cv.getContext('2d')
       if(bg && bg !== 'transparent'){
         ctx.fillStyle = bg
-        ctx.fillRect(0, 0, size, size)
+        ctx.fillRect(0, 0, w, h)
       }
-      ctx.drawImage(img, 0, 0, size, size)
+      ctx.drawImage(img, 0, 0, w, h)
       URL.revokeObjectURL(url)
       cv.toBlob(b => b ? resolve(b) : reject(new Error('pngEncode')), 'image/png')
     }

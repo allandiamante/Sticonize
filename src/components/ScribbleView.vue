@@ -8,6 +8,11 @@ import { theme, INK } from '../theme.js'
 
 defineProps({ mark: String })
 
+// both start tucked away, same as the vectorize page: the board is what the page is for,
+// and the tuning column is a wall of sliders no one needs open to drop an icon in
+const showOptions = ref(false)
+const showPresets = ref(false)
+
 const items = ref([])   // {name, text, pasted?}
 const active = ref(-1)
 
@@ -77,7 +82,7 @@ async function render(item, kind, size, bg){
   if(kind === 'svg')   return {name: base + '.svg', data: sizedSvg(svg, size), type: 'image/svg+xml;charset=utf-8'}
   if(kind === 'vue')   return {name: base + '.vue', data: vueSvg(svg, item.src), type: 'text/plain;charset=utf-8'}
   if(kind === 'react') return {name: base + '.jsx', data: reactSvg(svg, base, item.src), type: 'text/plain;charset=utf-8'}
-  const png = await svgToPng(sizedSvg(svg, size), size, bg)
+  const png = await svgToPng(sizedSvg(svg, size), size, size, bg)
   return {name: base + '.png', data: new Uint8Array(await png.arrayBuffer()), type: 'image/png'}
 }
 
@@ -107,13 +112,10 @@ async function downloadAll(kind, size, bg){
   batch.value = ''
   if(files.length) saveBlob(new Blob([zipStore(files)], {type:'application/zip'}), t.value.zipName)
 }
-
-// the vectorize tab hands its traced SVG straight to the queue here
-defineExpose({ add })
 </script>
 
 <template>
-  <div class="wrap">
+  <div class="wrap" :class="{'wrap--tucked': !showOptions}">
     <InputPanel
       :items="items"
       :active="active"
@@ -140,8 +142,22 @@ defineExpose({ add })
 
       <div class="divider"></div>
 
-      <p class="eyebrow">{{ t.recipes }}</p>
-      <div class="presets">
+      <p class="eyebrow">
+        {{ t.recipes }}
+        <button
+          type="button"
+          class="tuck"
+          :aria-expanded="showPresets"
+          :title="t.vec.moreOptions"
+          @click="showPresets = !showPresets"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span class="sr-only">{{ t.vec.moreOptions }}</span>
+        </button>
+      </p>
+      <div v-if="showPresets" class="presets">
         <button
           v-for="p in presets"
           :key="p"
@@ -158,8 +174,10 @@ defineExpose({ add })
       :can-download="!!drawing?.svg"
       :count="items.length"
       :batch="batch"
+      :open="showOptions"
       @download="download"
       @download-all="downloadAll"
+      @toggle="showOptions = !showOptions"
     />
   </div>
 </template>

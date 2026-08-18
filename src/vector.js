@@ -161,6 +161,97 @@ export function editPaths(svg, edits, tagged = false, selected = null){
   })
 }
 
+/* How far a shape may have moved, changed size or drifted in colour between two traces
+   and still count as the same shape. The three distances are each a fraction of their own
+   range, so this is a tenth of the canvas across, a tenth of it in size, or a tenth of the
+   way across the colour cube. Loose enough for a re-trace at another resolution, which
+   moves nothing but redraws everything; tight enough that an edit with nothing to land on
+   is dropped rather than moved onto a stranger. */
+const MATCH_MAX = 0.12
+
+/* How far a palette entry may drift between two traces and still be the same colour.
+   Re-quantizing the same image at another resolution moves a centroid by a few steps;
+   switching tone moves it across the cube. */
+const PALETTE_MAX = 0.1
+
+/* Distance between two CSS hex colours, as a fraction of the colour cube's diagonal.
+   Takes two '#rrggbb' strings; returns 0 for a pair that matches, 1 for black against
+   white and for anything that is not a plain hex colour. */
+function colorGap(a, b){
+  if(a === b) return 0
+  if(!/^#[0-9a-f]{6}$/i.test(a) || !/^#[0-9a-f]{6}$/i.test(b)) return 1
+  const [x, y] = [a, b].map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)))
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) / 441.7
+}
+
+/* Where each shape sits, how big it is and what colour it carries, in fractions of the
+   canvas so two traces of the same image at different resolutions can be compared.
+   vtracer emits absolute M/L/C only — no arcs, no H/V — so every number in a `d` is half
+   of an x,y pair and the centre can be averaged off them without parsing the grammar.
+   Takes the traced SVG; returns one {x, y, r, fill} per shape, in index order. */
+export function shapeMarks(svg){
+  const [, w, h] = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/) ?? [, 1, 1]
+  return [...svg.matchAll(SHAPE)].map(([shape]) => {
+    const fill = (shape.match(/\sfill="([^"]*)"/) || [, '#000000'])[1].toLowerCase()
+    const nums = (shape.match(/\sd="([^"]*)"/)?.[1] ?? '').match(/-?\d*\.?\d+/g) ?? []
+    let sx = 0, sy = 0, n = 0, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+    for(let i = 0; i + 1 < nums.length; i += 2){
+      const x = +nums[i] / w, y = +nums[i + 1] / h
+      sx += x; sy += y; n++
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y)
+      x1 = Math.max(x1, x); y1 = Math.max(y1, y)
+    }
+    return n ? {x: sx / n, y: sy / n, r: Math.hypot(x1 - x0, y1 - y0), fill}
+             : {x: 0, y: 0, r: 0, fill}
+  })
+}
+
+/* Carries the per-shape edits over to a fresh trace of the same image. The indices they
+   are keyed by mean nothing across traces — another working size redraws every shape and
+   renumbers all of them — so each edited shape is looked up again by where it sits, how
+   big it is and what colour it was traced in, and takes the index of whatever answers.
+   Each shape in the new trace can be claimed once, and an edit with nothing close enough
+   is dropped: a delete landing on the wrong shape is worse than a delete that is lost.
+   Takes the edits and the marks of the trace they were made on and of the new one;
+   returns a fresh edits object keyed by the new indices. */
+export function remapEdits(edits, from, to){
+  const out = {}
+  const taken = new Set()
+  for(const [k, edit] of Object.entries(edits)){
+    const a = from[k]
+    if(!a) continue
+    let best = -1, score = MATCH_MAX
+    for(let i = 0; i < to.length; i++){
+      if(taken.has(i)) continue
+      const b = to[i]
+      const s = Math.hypot(a.x - b.x, a.y - b.y) + Math.abs(a.r - b.r) + colorGap(a.fill, b.fill)
+      if(s < score){ score = s; best = i }
+    }
+    if(best < 0) continue
+    taken.add(best)
+    out[best] = edit
+  }
+  return out
+}
+
+/* Carries the palette swaps over to a fresh trace. They are keyed by the colour the trace
+   produced, and re-quantizing the same image at another resolution nudges every centroid,
+   so each key is pulled onto the nearest entry of the new palette. A key with nothing near
+   it — what switching tone leaves behind — is dropped.
+   Takes the swaps and the new palette; returns a fresh swaps object. */
+export function remapSwaps(swaps, palette){
+  const out = {}
+  for(const [key, value] of Object.entries(swaps)){
+    let best = null, gap = PALETTE_MAX
+    for(const c of palette){
+      const d = colorGap(key, c)
+      if(d < gap){ gap = d; best = c.toLowerCase() }
+    }
+    if(best) out[best] = value
+  }
+  return out
+}
+
 /* Records what a reactive map held at one or more keys just before they change, so
    undoEdit can put them back — the recolour or delete itself still happens at the call
    site. A group of keys recorded together undoes together, which is what a colour

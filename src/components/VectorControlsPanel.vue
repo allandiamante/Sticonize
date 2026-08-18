@@ -2,11 +2,15 @@
 import { MODES, STACKING, TONES, WORK_SIZES, MAX_COLOR_PRECISION, MAX_THRESHOLD } from '../vector.js'
 import { t } from '../i18n.js'
 import InfoTip from './InfoTip.vue'
+import { ref } from 'vue'
 
 defineProps({ opts: Object, canExport: Boolean, copied: Boolean, refining: Boolean, canRefine: Boolean, open: Boolean })
-const emit = defineEmits(['download', 'copy', 'stylize', 'refine', 'toggle'])
+const emit = defineEmits(['download', 'png', 'copy', 'refine', 'toggle'])
 
 const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
+
+const pngSize = ref(1024)
+const size = () => Math.min(Math.max(parseInt(pngSize.value, 10) || 1024, 32), 4096)
 </script>
 
 <template>
@@ -141,9 +145,15 @@ const BACKGROUNDS = ['transparent', '#FFFFFF', '#14181A', '#EFF2ED']
     <div class="divider"></div>
     <p class="eyebrow">{{ t.vec.output }}</p>
 
+    <!-- the longer side, since a trace is whatever shape the image was -->
+    <div class="ctrl">
+      <div class="ctrl-head"><label for="pngSize">{{ t.pngSize }}</label></div>
+      <input id="pngSize" type="number" min="32" max="4096" step="16" v-model="pngSize">
+    </div>
+
     <button class="btn" :disabled="!canExport" @click="emit('download')">{{ t.vec.download }}</button>
+    <button class="btn btn--ghost" :disabled="!canExport" @click="emit('png', size())">{{ t.vec.downloadPng }}</button>
     <button class="btn btn--ghost" :disabled="!canExport" @click="emit('copy')">{{ copied ? t.vec.copied : t.vec.copy }}</button>
-    <button class="btn btn--ghost" :disabled="!canExport" @click="emit('stylize')">{{ t.vec.stylize }}</button>
     </template>
   </section>
 </template>

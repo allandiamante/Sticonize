@@ -2,12 +2,12 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import VectorInputPanel from './VectorInputPanel.vue'
 import VectorControlsPanel from './VectorControlsPanel.vue'
-import { trace, refine, validateFile, withBackground, editPaths, swapFills, shapeFills, countPaths, countColors, formatBytes, recordEdit, sealEdit, undoEdit, PRESETS } from '../vector.js'
-import { saveBlob } from '../scribble.js'
+import { trace, refine, validateFile, withBackground, editPaths, swapFills, shapeFills, countPaths, countColors, formatBytes, recordEdit, sealEdit, undoEdit, shapeMarks, remapEdits, remapSwaps, PRESETS } from '../vector.js'
+import { saveBlob, svgToPng } from '../scribble.js'
 import { t, errText } from '../i18n.js'
+import { page } from '../router.js'
 
 defineProps({ mark: String })
-const emit = defineEmits(['stylize'])
 
 const source = ref(null)
 const result = ref(null)
@@ -53,19 +53,44 @@ function record(map, key){
   recordEdit(history, map, key)
 }
 
-// the indices and the colours only mean anything against the trace they were made on
-watch(result, () => {
+// The indices and the colours only mean anything against the trace they were made on, and
+// a new working size or a refine pass renumbers every shape and moves every palette entry.
+// Rather than drop the work, each edit is looked up again in the trace that just landed —
+// changing the resolution is a change of resolution, not a change of mind. What no longer
+// has anywhere to go is dropped, and the undo stack goes with it: its keys were indices
+// into the trace being replaced.
+watch(result, (now, before) => {
+  const shapes = now && before && editCount.value
+    ? remapEdits(edits, shapeMarks(before.svg), shapeMarks(now.svg))
+    : {}
+  const colors = now && before ? remapSwaps(swaps, now.palette ?? []) : {}
   selected.value.clear()
   for(const k of Object.keys(edits)) delete edits[k]
   for(const k of Object.keys(swaps)) delete swaps[k]
+  Object.assign(edits, shapes)
+  Object.assign(swaps, colors)
   history.length = redo.length = 0
 })
 
-/* Ctrl/Cmd+Z undoes the last edit or swap, Ctrl+Y or Ctrl/Cmd+Shift+Z puts it back —
-   both spellings of redo, since Windows and the rest of the world disagree on it.
-   Browsers have no native undo to fight here since the board isn't an editable text
-   field. */
+/* Delete or Backspace drops the selected shapes. Ctrl/Cmd+Z undoes the last edit or
+   swap, Ctrl+Y or Ctrl/Cmd+Shift+Z puts it back — both spellings of redo, since Windows
+   and the rest of the world disagree on it. Browsers have no native undo to fight here
+   since the board isn't an editable text field.
+   The listener is on the window and this page never unmounts, so every key first has to
+   get past the page check and past whatever field has focus — Backspace in the PNG size
+   box is a Backspace, not a delete, and would walk the history back on top of it. */
 function onKeydown(e){
+  if(page.value !== 'vector') return
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(e.target?.tagName)) return
+
+  // laptops ship one key or the other, so both mean the same thing here
+  if(e.key === 'Delete' || e.key === 'Backspace'){
+    if(!selected.value.size) return
+    e.preventDefault()
+    dropSelected()
+    return
+  }
+
   if(!(e.ctrlKey || e.metaKey)) return
   const key = e.key.toLowerCase()
   const undo = key === 'z' && !e.shiftKey
@@ -339,12 +364,21 @@ async function copy(){
   }
 }
 
-/* Hands the traced SVG to the stylize tab.
-   ponytail: a photo trace can be thousands of paths, which scribbles slowly — the
-   presets aimed at icons (logo, mono) are the ones worth sending on.
-   Takes nothing and returns nothing. */
-function stylize(){
-  if(svg.value) emit('stylize', baseName(), svg.value)
+/* Saves the trace as a PNG, the longer side at the asked-for size and the other one
+   kept in proportion — a traced photo is whatever shape it came in, and squaring it
+   would stretch it.
+   Takes the pixel size of the longer side; returns a Promise that settles once the
+   file is handed over or the error is on screen. */
+async function downloadPng(size){
+  const {width, height} = result.value
+  const k = size / Math.max(width, height)
+  try{
+    // the background is already painted into the markup, so the canvas needs none
+    const png = await svgToPng(svg.value, Math.round(width * k), Math.round(height * k))
+    saveBlob(png, `${baseName()}.png`)
+  }catch(err){
+    error.value = errText(err)
+  }
 }
 </script>
 
@@ -460,8 +494,8 @@ function stylize(){
       :can-refine="!!source && !busy"
       :open="showOptions"
       @download="download"
+      @png="downloadPng"
       @copy="copy"
-      @stylize="stylize"
       @refine="runRefine"
       @toggle="showOptions = !showOptions"
     />
